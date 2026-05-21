@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import 'package:intl/intl.dart';
 import 'nota_sukses_page.dart';
-import 'dart:math';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key});
@@ -44,38 +43,55 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return;
     }
 
-    // SIMULASI JARAK (Nanti diganti dengan Google Maps API)
+    // SIMULASI JARAK
     String alamat = _alamatCtrl.text.toLowerCase();
     if (alamat.contains("kampus") || alamat.contains("polije")) {
       _estimasiJarak = 2.5; // Dekat kampus
     } else if (alamat.contains("mastrip")) {
       _estimasiJarak = 6.0; // Agak jauh
     } else {
-      // Jarak random 4 - 8 km berdasarkan panjang teks untuk simulasi
       _estimasiJarak = 4.0 + (alamat.length % 5);
     }
 
-    // RUMUS ONGKIR: 5km pertama = Rp3.000. Setelahnya + Rp1.000/km
+    // RUMUS ONGKIR
     int baseOngkir = 3000;
     if (_estimasiJarak <= 5.0) {
       _biayaOngkir = baseOngkir;
     } else {
-      int extraKm = (_estimasiJarak - 5.0).ceil(); // Pembulatan ke atas
+      int extraKm = (_estimasiJarak - 5.0).ceil();
       _biayaOngkir = baseOngkir + (extraKm * 1000);
     }
 
-    // Panggil setState jika diperlukan di listener
     setState(() {});
   }
 
+  // --- LOGIKA PERHITUNGAN BIAYA ---
   int hitungSubtotal() {
     int subtotal = 0;
-    for (var item in keranjangGlobal) subtotal += (item['harga'] as int);
+    for (var item in keranjangGlobal) {
+      subtotal += (item['harga'] as int);
+    }
     return subtotal;
   }
 
+  // LOGIKA DISKON 10% KHUSUS PRINT > 50 HALAMAN
+  int hitungDiskon() {
+    int totalDiskon = 0;
+    for (var item in keranjangGlobal) {
+      // Cek apakah item ini layanan Print dan halamannya >= 50
+      if (item['jenis'] == 'Print' && item.containsKey('jumlahHalaman')) {
+        int hal = item['jumlahHalaman'] as int;
+        if (hal >= 50) {
+          totalDiskon += ((item['harga'] as int) * 0.10).toInt(); // Diskon 10%
+        }
+      }
+    }
+    return totalDiskon;
+  }
+
   int hitungTotal() {
-    return hitungSubtotal() + _biayaOngkir;
+    // Total = Subtotal + Ongkir - Diskon
+    return hitungSubtotal() + _biayaOngkir - hitungDiskon();
   }
 
   void _pilihAlamatTersimpan() {
@@ -171,7 +187,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 const SizedBox(height: 15),
                 _buildSectionCard("Pembayaran", _buildMetodeBayarSection()),
                 const SizedBox(height: 15),
-                _buildRingkasanBiaya(),
+                _buildRingkasanBiaya(), // Di sini letak diskonnya muncul
               ],
             ),
           ),
@@ -316,7 +332,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ),
           ),
-
           // INFO ONGKIR REALTIME
           if (_estimasiJarak > 0)
             Container(
@@ -373,6 +388,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildRingkasanBiaya() {
+    int diskon = hitungDiskon(); // Ambil nilai diskon
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -398,6 +415,33 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ],
           ),
+
+          // MUNCULKAN DISKON JIKA ADA (Halaman Print >= 50)
+          if (diskon > 0) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Diskon Promo Print (10%)",
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  "- Rp $diskon",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ],
+
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -471,7 +515,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   return;
                 }
 
-                // CEK JIKA QRIS
                 if (_metodeBayar == "QRIS") {
                   _tampilkanDialogQRIS();
                 } else {
@@ -500,11 +543,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  // --- FITUR POP-UP QRIS ---
   void _tampilkanDialogQRIS() {
     showDialog(
       context: context,
-      barrierDismissible: false, // Wajib tekan tombol untuk tutup
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         contentPadding: const EdgeInsets.all(25),
@@ -521,8 +563,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
             const SizedBox(height: 20),
-
-            // MOCKUP BARKODE QRIS
             Container(
               padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(
@@ -538,7 +578,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
               child: Icon(Icons.qr_code_2, size: 200, color: primaryTeal),
             ),
-
             const SizedBox(height: 20),
             const Text(
               "Total Tagihan",
@@ -552,12 +591,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 color: Colors.orange[800],
               ),
             ),
-
             const SizedBox(height: 25),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context); // Tutup QRIS
-                _prosesSimpanData(); // Lanjut cetak nota
+                Navigator.pop(context);
+                _prosesSimpanData();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryTeal,
@@ -592,7 +630,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       'noPesanan':
           "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
       'items': List.from(keranjangGlobal),
-      'total': hitungTotal(),
+      'total': hitungTotal(), // Sudah terpotong diskon
       'metodeAmbil': _metodeAmbil,
       'metodeBayar': _metodeBayar,
       'alamat': _metodeAmbil == "Diantar (COD)"

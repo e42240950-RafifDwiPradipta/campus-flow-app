@@ -263,7 +263,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 8),
 
                   const Text(
-                    "Your University Companion",
+                    "Easy way for your campus life",
                     style: TextStyle(color: Colors.grey, fontSize: 14),
                   ),
 

@@ -7,6 +7,15 @@ class NotaSuksesPage extends StatelessWidget {
 
   const NotaSuksesPage({super.key, required this.dataNota});
 
+  // Fungsi jaga-jaga kalau data subtotal tidak terbawa
+  int hitungManual(List items) {
+    int total = 0;
+    for (var item in items) {
+      total += (item['harga'] as int);
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color primaryTeal = Color(0xFF1B4D5C);
@@ -105,6 +114,36 @@ class NotaSuksesPage extends StatelessWidget {
 
                     const Divider(height: 30),
 
+                    // --- TAMBAHAN RINCIAN BIAYA & DISKON ---
+                    const Text(
+                      "RINCIAN BIAYA",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildSummaryRow(
+                      "Subtotal Produk",
+                      "Rp ${dataNota['subtotal'] ?? hitungManual(dataNota['items'])}",
+                    ),
+                    _buildSummaryRow(
+                      "Ongkos Kirim",
+                      "Rp ${dataNota['ongkir'] ?? 0}",
+                    ),
+
+                    // Logika memunculkan baris diskon jika ada
+                    if ((dataNota['diskon'] ?? 0) > 0)
+                      _buildSummaryRow(
+                        "Diskon Promo Print",
+                        "- Rp ${dataNota['diskon']}",
+                        isDiscount: true,
+                      ),
+
+                    const Divider(height: 30),
+                    // ----------------------------------------
+
                     // Info Pengiriman & Bayar
                     _buildNotaRow("Tanggal", dataNota['tanggal']),
                     _buildNotaRow("Metode Ambil", dataNota['metodeAmbil']),
@@ -171,6 +210,7 @@ class NotaSuksesPage extends StatelessWidget {
     );
   }
 
+  // --- WIDGET PENDUKUNG ---
   Widget _buildNotaRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -183,6 +223,38 @@ class NotaSuksesPage extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget khusus untuk rincian biaya (ongkir & diskon)
+  Widget _buildSummaryRow(
+    String title,
+    String value, {
+    bool isDiscount = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: isDiscount ? Colors.green : Colors.grey,
+              fontSize: 13,
+              fontWeight: isDiscount ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: isDiscount ? Colors.green : Colors.black87,
+              fontSize: 13,
+              fontWeight: isDiscount ? FontWeight.bold : FontWeight.w600,
             ),
           ),
         ],

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; // 1. Wajib import ini
+import 'package:google_fonts/google_fonts.dart';
 import 'pages/splash_screen.dart';
 
 // --- GUDANG DATA GLOBAL CAMPUS FLOW ---
 
-// 1. Identitas User (Inisialisasi awal kosong agar nanti diisi saat Login)
+// 1. Identitas User
 String namaUserGlobal = "";
 String nimUserGlobal = "";
-String emailUserGlobal =
-    ""; // Variabel ini yang akan kita panggil di Drawer & Profil
+String emailUserGlobal = "";
 bool isAdminGlobal = false;
 
 // 2. Data Transaksi & Keranjang
@@ -27,7 +26,7 @@ List<Map<String, dynamic>> stokAtkGlobal = [
   },
 ];
 
-// 4. Data Customer (Untuk Panel Admin)
+// 4. Data Customer
 List<Map<String, String>> dataCustomerGlobal = [
   {
     "nama": "Farhan",
@@ -51,6 +50,18 @@ List<Map<String, dynamic>> daftarAlamatGlobal = [
   },
 ];
 
+// 6. Kalender (UPDATE: Menggunakan markerStart & markerEnd untuk mendukung Rentang Tanggal)
+List<Map<String, dynamic>> dataKalenderGlobal = [
+  {
+    "title": "UAS Semester Genap",
+    "date": "8 - 12 Jun 2026",
+    "icon": Icons.edit_calendar,
+    "color": Colors.orange,
+    "markerStart": DateTime(2026, 6, 8),
+    "markerEnd": DateTime(2026, 6, 12),
+  },
+];
+
 void main() {
   runApp(const CampusFlowApp());
 }
@@ -69,10 +80,7 @@ class CampusFlowApp extends StatelessWidget {
           primary: const Color(0xFF1B4D5C),
           secondary: const Color(0xFF2D7D8E),
         ),
-
-        // 2. Terapkan Poppins ke seluruh teks di aplikasi
         textTheme: GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme),
-
         useMaterial3: true,
       ),
       home: const SplashScreen(),

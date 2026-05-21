@@ -21,8 +21,6 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
   final Color primaryTeal = const Color(0xFF1B4D5C);
 
   int _estimasiTotal = 0;
-  int _hargaNormal = 0;
-  double _diskon = 0;
 
   void _hitungHarga() {
     if (_namaFile == null) return;
@@ -33,17 +31,8 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
     if (_ukuranKertas == "A3") subtotal += 2000;
     if (_pakaiJilid) subtotal += 5000;
 
-    _hargaNormal = subtotal;
-
-    // Diskon 15% sesuai promo banner di Home
-    if (_jumlahHalaman >= 50) {
-      _diskon = subtotal * 0.15;
-    } else {
-      _diskon = 0;
-    }
-
     setState(() {
-      _estimasiTotal = (subtotal - _diskon).toInt();
+      _estimasiTotal = subtotal; // HANYA HARGA NORMAL
     });
   }
 
@@ -75,7 +64,6 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header Info
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(25, 10, 25, 30),
@@ -91,7 +79,6 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
                 style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -99,20 +86,16 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
                 children: [
                   _buildSectionTitle("1. Dokumen Anda"),
                   _buildUploadArea(),
-
                   if (_namaFile != null) ...[
                     const SizedBox(height: 25),
                     _buildSectionTitle("2. Konfigurasi Cetak"),
                     _buildPrintSettings(),
-
                     const SizedBox(height: 25),
                     _buildSectionTitle("3. Catatan Khusus"),
                     _buildCatatanField(),
-
                     const SizedBox(height: 30),
                     _buildPriceSummary(),
                     const SizedBox(height: 20),
-
                     _buildAddToCartButton(),
                     const SizedBox(height: 20),
                   ],
@@ -136,7 +119,7 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const KeranjangPage()),
-            ),
+            ).then((_) => setState(() {})),
           ),
           if (keranjangGlobal.isNotEmpty)
             Positioned(
@@ -383,35 +366,12 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
       ),
       child: Column(
         children: [
-          if (_diskon > 0)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "Harga Normal",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  Text(
-                    "Rp $_hargaNormal",
-                    style: const TextStyle(
-                      decoration: TextDecoration.lineThrough,
-                      color: Colors.red,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                _diskon > 0 ? "Total (Diskon 15%)" : "Estimasi Total",
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+              const Text(
+                "Estimasi Total",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               Text(
                 "Rp $_estimasiTotal",
@@ -423,6 +383,17 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
               ),
             ],
           ),
+          if (_jumlahHalaman >= 50) ...[
+            const SizedBox(height: 5),
+            const Text(
+              "*Diskon Print 10% akan otomatis dipotong di halaman pembayaran.",
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.orange,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -439,6 +410,8 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
             'detail':
                 '$_ukuranKertas, $_jumlahHalaman Hal, $_warna${_pakaiJilid ? ", Jilid" : ""}',
             'catatan': _catatanController.text,
+            'jumlahHalaman':
+                _jumlahHalaman, // INI KUNCI UTAMANYA! Kita lempar info halamannya.
           });
         });
         ScaffoldMessenger.of(context).showSnackBar(
