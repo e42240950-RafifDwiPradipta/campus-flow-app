@@ -18,9 +18,19 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
   bool _pakaiJilid = false;
 
   final TextEditingController _catatanController = TextEditingController();
+  final TextEditingController _halamanController = TextEditingController(
+    text: "1",
+  );
   final Color primaryTeal = const Color(0xFF1B4D5C);
 
   int _estimasiTotal = 0;
+
+  @override
+  void dispose() {
+    _catatanController.dispose();
+    _halamanController.dispose();
+    super.dispose();
+  }
 
   void _hitungHarga() {
     if (_namaFile == null) return;
@@ -33,6 +43,34 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
 
     setState(() {
       _estimasiTotal = subtotal; // HANYA HARGA NORMAL
+    });
+  }
+
+  // Logika update halaman dari tombol + dan -
+  void _updateHalaman(int val) {
+    if (val < 1) val = 1;
+    setState(() {
+      _jumlahHalaman = val;
+      _halamanController.text = val.toString();
+      // Pindahkan kursor ke ujung teks
+      _halamanController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _halamanController.text.length),
+      );
+    });
+    _hitungHarga();
+  }
+
+  // Fungsi untuk mengembalikan form ke kondisi awal
+  void _resetForm() {
+    setState(() {
+      _namaFile = null;
+      _jumlahHalaman = 1;
+      _halamanController.text = "1";
+      _warna = "Hitam Putih";
+      _ukuranKertas = "A4";
+      _pakaiJilid = false;
+      _catatanController.clear();
+      _estimasiTotal = 0;
     });
   }
 
@@ -269,29 +307,52 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
       children: [
         const Text(
           "Jumlah Halaman",
-          style: TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        Row(
-          children: [
-            _countBtn(Icons.remove, () {
-              if (_jumlahHalaman > 1) setState(() => _jumlahHalaman--);
-              _hitungHarga();
-            }),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              child: Text(
-                "$_jumlahHalaman",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        // Desain Counter Modern (Menyatu dalam box)
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: Row(
+            children: [
+              _countBtn(Icons.remove, () => _updateHalaman(_jumlahHalaman - 1)),
+              SizedBox(
+                width: 50,
+                child: TextField(
+                  controller: _halamanController,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onChanged: (val) {
+                    int? parsed = int.tryParse(val);
+                    if (parsed != null && parsed > 0) {
+                      setState(() => _jumlahHalaman = parsed);
+                      _hitungHarga();
+                    }
+                  },
+                  onEditingComplete: () {
+                    FocusScope.of(context).unfocus(); // Tutup keyboard
+                    if (int.tryParse(_halamanController.text) == null ||
+                        int.parse(_halamanController.text) < 1) {
+                      _updateHalaman(1); // Balik ke 1 kalau ngawur
+                    }
+                  },
                 ),
               ),
-            ),
-            _countBtn(Icons.add, () {
-              setState(() => _jumlahHalaman++);
-              _hitungHarga();
-            }),
-          ],
+              _countBtn(Icons.add, () => _updateHalaman(_jumlahHalaman + 1)),
+            ],
+          ),
         ),
       ],
     );
@@ -300,12 +361,9 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
   Widget _countBtn(IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
-        ),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Icon(icon, size: 20, color: primaryTeal),
       ),
     );
@@ -402,6 +460,16 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
   Widget _buildAddToCartButton() {
     return ElevatedButton(
       onPressed: () {
+        if (_namaFile == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Mohon upload file terlebih dahulu!"),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
         setState(() {
           keranjangGlobal.add({
             'jenis': 'Print',
@@ -410,10 +478,14 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
             'detail':
                 '$_ukuranKertas, $_jumlahHalaman Hal, $_warna${_pakaiJilid ? ", Jilid" : ""}',
             'catatan': _catatanController.text,
-            'jumlahHalaman':
-                _jumlahHalaman, // INI KUNCI UTAMANYA! Kita lempar info halamannya.
+            'jumlahHalaman': _jumlahHalaman,
+            'file': _namaFile, // Simpan nama file agar bisa dipanggil Admin
           });
         });
+
+        // Panggil fungsi reset form
+        _resetForm();
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Berhasil masuk keranjang!"),

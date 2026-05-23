@@ -54,6 +54,10 @@ class PesananPage extends StatelessWidget {
     Map<String, dynamic> order,
     Color themeColor,
   ) {
+    // FIX ID PESANAN: Menyamakan dengan sistem terbaru
+    String orderId = (order['noPesanan'] ?? order['id'] ?? "CAMPUS-000")
+        .toString();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
@@ -81,7 +85,7 @@ class PesananPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        order['noPesanan'] ?? "No Pesanan",
+                        orderId,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
@@ -94,7 +98,10 @@ class PesananPage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  _buildStatusBadge(order['status'] ?? 'Diproses'),
+                  _buildStatusBadge(
+                    order['status'] ?? 'Diproses',
+                    order['warnaStatus'],
+                  ),
                 ],
               ),
               const Padding(
@@ -125,22 +132,32 @@ class PesananPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusBadge(String status) {
+  Widget _buildStatusBadge(String status, Color? color) {
+    Color badgeColor = color ?? const Color(0xFF2D7D8E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF2D7D8E).withOpacity(0.1),
+        color: badgeColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         status,
-        style: const TextStyle(
-          color: Color(0xFF2D7D8E),
+        style: TextStyle(
+          color: badgeColor,
           fontSize: 11,
           fontWeight: FontWeight.bold,
         ),
       ),
     );
+  }
+
+  // Fungsi jaga-jaga untuk hitung subtotal jika data lama tidak punya key 'subtotal'
+  int _hitungSubtotalManual(List items) {
+    int total = 0;
+    for (var item in items) {
+      total += (item['harga'] as int? ?? 0);
+    }
+    return total;
   }
 
   void _showDetail(BuildContext context, Map<String, dynamic> order) {
@@ -177,72 +194,105 @@ class PesananPage extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 15),
-            ...items
-                .map(
-                  (item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 15),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: primaryTeal.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.description_outlined,
-                            color: primaryTeal,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item['nama'],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Text(
-                                item['detail'] ?? "",
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (item['catatan'] != null &&
-                                  item['catatan'] != "")
-                                Text(
-                                  "Note: ${item['catatan']}",
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontStyle: FontStyle.italic,
-                                    color: Colors.orange,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          "Rp ${item['harga']}",
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
+
+            // ====================================================
+            // PENGURAIAN ITEM LENGKAP (SAMA DENGAN ADMIN)
+            // ====================================================
+            ...items.map((item) {
+              // Menangkap spesifikasi (menu makanan, spec print) dan catatan
+              String specs = item['spesifikasi'] ?? item['detail'] ?? '';
+              String note = item['catatan'] ?? item['note'] ?? '-';
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 15),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: primaryTeal.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.description_outlined,
+                        color: primaryTeal,
+                        size: 20,
+                      ),
                     ),
-                  ),
-                )
-                .toList(),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item['nama'] ?? 'Item',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          // Munculkan Spesifikasi / Detail Menu Makanan
+                          if (specs.isNotEmpty && specs != '-')
+                            Text(
+                              specs,
+                              style: TextStyle(
+                                color: Colors.grey[800],
+                                fontSize: 12,
+                              ),
+                            ),
+                          // Munculkan Note (Warna Oranye)
+                          if (note.isNotEmpty && note != '-')
+                            Text(
+                              "Note: $note",
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.orange,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      "Rp ${item['harga']}",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+
             const Divider(height: 30),
-            _buildDetailRow("Metode Ambil", order['metodeAmbil']),
-            _buildDetailRow("Pembayaran", order['metodeBayar']),
-            if (order['alamat'] != "-")
+
+            // ====================================================
+            // RINCIAN BIAYA (SAMA DENGAN NOTA SUKSES)
+            // ====================================================
+            _buildDetailRow(
+              "Subtotal Produk",
+              "Rp ${order['subtotal'] ?? _hitungSubtotalManual(items)}",
+            ),
+            _buildDetailRow("Ongkos Kirim", "Rp ${order['ongkir'] ?? 0}"),
+
+            if ((order['diskon'] ?? 0) > 0)
+              _buildDetailRow(
+                "Diskon Promo Print",
+                "- Rp ${order['diskon']}",
+                isGreen: true,
+              ),
+
+            const SizedBox(height: 10),
+
+            _buildDetailRow("Metode Ambil", order['metodeAmbil'] ?? "-"),
+            _buildDetailRow("Pembayaran", order['metodeBayar'] ?? "-"),
+            if (order['alamat'] != null &&
+                order['alamat'] != "-" &&
+                order['metodeAmbil'] == "Diantar (COD)")
               _buildDetailRow("Alamat", order['alamat']),
+
             const SizedBox(height: 20),
+
+            // TOTAL AKHIR
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -267,7 +317,7 @@ class PesananPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, {bool isGreen = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -278,7 +328,11 @@ class PesananPage extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              style: TextStyle(
+                fontWeight: isGreen ? FontWeight.bold : FontWeight.w500,
+                fontSize: 13,
+                color: isGreen ? Colors.green : Colors.black87,
+              ),
             ),
           ),
         ],
