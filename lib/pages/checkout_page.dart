@@ -612,19 +612,52 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   void _prosesSimpanData() {
-    // Memastikan seluruh data detail item masuk ke dalam nota
     List<Map<String, dynamic>> itemsFinal = keranjangGlobal.map((item) {
+      // =========================================================
+      // PENDETEKSI JUMLAH (EKSTRAK ANGKA DARI STRING JIKA DIPERLUKAN)
+      // =========================================================
+      int qty = 1;
+      if (item['jumlah'] != null) {
+        qty = item['jumlah'] is int
+            ? item['jumlah']
+            : int.tryParse(item['jumlah'].toString()) ?? 1;
+      } else if (item['detail'] != null &&
+          item['detail'].toString().contains('pcs')) {
+        // Ekstrak angka otomatis dari string (misal: "Produk ATK (21 pcs)")
+        final match = RegExp(
+          r'\((\d+)\s*pcs\)',
+        ).firstMatch(item['detail'].toString());
+        if (match != null) {
+          qty = int.tryParse(match.group(1) ?? '1') ?? 1;
+        }
+      }
+
       return {
         'nama': item['nama'],
         'harga': item['harga'],
-        'jumlah': item['jumlah'] ?? 1,
+        'jumlah': qty, // Menggunakan angka hasil ekstraksi
         'spesifikasi': item['spesifikasi'] ?? item['detail'] ?? '-',
         'catatan': item['catatan'] ?? item['note'] ?? '-',
-        'file': item['file'], // Untuk Download PDF Admin
-        'referensi':
-            item['referensi'] ?? item['foto'], // Untuk Foto Jasa Desain
+        'file': item['file'],
+        'referensi': item['referensi'] ?? item['foto'],
       };
     }).toList();
+
+    // =========================================================
+    // LOGIKA PEMOTONGAN STOK ATK YANG PRESISI
+    // =========================================================
+    for (var itemFinal in itemsFinal) {
+      for (var stokItem in stokAtkGlobal) {
+        if (stokItem['nama'] == itemFinal['nama']) {
+          int stokAwal = stokItem['stok'] as int;
+          int stokDipotong = itemFinal['jumlah'] as int;
+
+          stokItem['stok'] = stokAwal - stokDipotong;
+          if ((stokItem['stok'] as int) < 0)
+            stokItem['stok'] = 0; // Biar tidak minus
+        }
+      }
+    }
 
     Map<String, dynamic> notaBaru = {
       'id':
@@ -647,8 +680,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     };
 
     setState(() {
-      daftarPesananGlobal.insert(0, notaBaru); // Masukkan ke paling atas daftar
-      keranjangGlobal.clear(); // Bersihkan keranjang setelah belanja
+      daftarPesananGlobal.insert(0, notaBaru);
+      keranjangGlobal.clear();
     });
 
     Navigator.pushReplacement(

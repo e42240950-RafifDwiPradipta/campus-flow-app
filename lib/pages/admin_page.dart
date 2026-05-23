@@ -14,6 +14,13 @@ class _AdminPageState extends State<AdminPage>
   late TabController _tabController;
   final Color primaryColor = const Color(0xFF114B5F);
 
+  // =========================================================
+  // STATE UNTUK FITUR SEARCH & FILTER
+  // =========================================================
+  String _searchPesanan = "";
+  String _filterPesanan = "Semua";
+  String _searchCustomer = "";
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +40,38 @@ class _AdminPageState extends State<AdminPage>
     return daftarPesananGlobal
         .where((order) => order['status'] == 'Selesai')
         .fold(0, (sum, item) => sum + (item['total'] as int? ?? 0));
+  }
+
+  // =========================================================
+  // HELPER: DIALOG DOUBLE KONFIRMASI (ANTI SALAH PENCET)
+  // =========================================================
+  void _tampilkanKonfirmasi(
+    String judul,
+    String pesan,
+    VoidCallback onConfirm,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(judul, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(pesan),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              onConfirm();
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text("Ya, Lanjutkan"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -171,84 +210,158 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // 1. TAB PESANAN
+  // 1. TAB PESANAN (DENGAN SEARCH & FILTER)
   // =========================================================
   Widget _buildPesananTab() {
-    if (daftarPesananGlobal.isEmpty) {
-      return const Center(
-        child: Text(
-          "Belum ada pesanan masuk",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
-    }
+    // Logika Filter & Search
+    final List filteredOrders = daftarPesananGlobal.where((order) {
+      String id = (order['id'] ?? order['noPesanan'] ?? "")
+          .toString()
+          .toLowerCase();
+      String status = order['status'] ?? "Diproses";
+      bool matchesSearch = id.contains(_searchPesanan.toLowerCase());
+      bool matchesFilter =
+          _filterPesanan == "Semua" || status == _filterPesanan;
+      return matchesSearch && matchesFilter;
+    }).toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: daftarPesananGlobal.length,
-      itemBuilder: (context, index) {
-        final order = daftarPesananGlobal[index];
-        String orderId = (order['id'] ?? order['noPesanan'] ?? "CAMPUS-000")
-            .toString();
-        String status = order['status'] ?? "Diproses";
-        Color statusColor = order['warnaStatus'] ?? Colors.orange;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: ListTile(
-            onTap: () => _showOrderDetail(order, index),
-            leading: CircleAvatar(
-              backgroundColor: statusColor,
-              child: Icon(
-                status == "Dibatalkan" ? Icons.cancel : Icons.receipt,
-                color: Colors.white,
+    return Column(
+      children: [
+        // AREA SEARCH & FILTER CHIPS
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 15, 20, 5),
+          child: TextField(
+            onChanged: (v) => setState(() => _searchPesanan = v),
+            decoration: InputDecoration(
+              hintText: "Cari nomor pesanan...",
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide.none,
               ),
             ),
-            title: Text(
-              orderId,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text("$status - Rp ${order['total']}"),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (status == "Diproses") ...[
-                  IconButton(
-                    icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                    onPressed: () => setState(() {
-                      order['status'] = "Dibatalkan";
-                      order['warnaStatus'] = Colors.red;
-                    }),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.check_circle_outline,
-                      color: Colors.green,
-                    ),
-                    onPressed: () => setState(() {
-                      order['status'] = "Selesai";
-                      order['warnaStatus'] = Colors.green;
-                    }),
-                  ),
-                ] else
-                  Icon(
-                    status == "Selesai" ? Icons.check_circle : Icons.cancel,
-                    color: statusColor,
-                  ),
-              ],
-            ),
           ),
-        );
-      },
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: Row(
+            children: ["Semua", "Diproses", "Selesai", "Dibatalkan"].map((
+              status,
+            ) {
+              bool isSelected = _filterPesanan == status;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: ChoiceChip(
+                  label: Text(status),
+                  selected: isSelected,
+                  selectedColor: primaryColor.withOpacity(0.2),
+                  labelStyle: TextStyle(
+                    color: isSelected ? primaryColor : Colors.black,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                  onSelected: (v) => setState(() => _filterPesanan = status),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // LIST PESANAN
+        Expanded(
+          child: filteredOrders.isEmpty
+              ? const Center(
+                  child: Text(
+                    "Pesanan tidak ditemukan",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: filteredOrders.length,
+                  itemBuilder: (context, index) {
+                    final order = filteredOrders[index];
+                    String orderId =
+                        (order['id'] ?? order['noPesanan'] ?? "CAMPUS-000")
+                            .toString();
+                    String status = order['status'] ?? "Diproses";
+                    Color statusColor = order['warnaStatus'] ?? Colors.orange;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: ListTile(
+                        onTap: () => _showOrderDetail(order, index),
+                        leading: CircleAvatar(
+                          backgroundColor: statusColor,
+                          child: Icon(
+                            status == "Dibatalkan"
+                                ? Icons.cancel
+                                : Icons.receipt,
+                            color: Colors.white,
+                          ),
+                        ),
+                        title: Text(
+                          orderId,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text("$status - Rp ${order['total']}"),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (status == "Diproses") ...[
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.cancel_outlined,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => _tampilkanKonfirmasi(
+                                  "Batalkan Pesanan?",
+                                  "Yakin ingin membatalkan pesanan $orderId?",
+                                  () => setState(() {
+                                    order['status'] = "Dibatalkan";
+                                    order['warnaStatus'] = Colors.red;
+                                  }),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.check_circle_outline,
+                                  color: Colors.green,
+                                ),
+                                onPressed: () => _tampilkanKonfirmasi(
+                                  "Selesaikan Pesanan?",
+                                  "Pastikan barang sudah diterima oleh pelanggan.",
+                                  () => setState(() {
+                                    order['status'] = "Selesai";
+                                    order['warnaStatus'] = Colors.green;
+                                  }),
+                                ),
+                              ),
+                            ] else
+                              Icon(
+                                status == "Selesai"
+                                    ? Icons.check_circle
+                                    : Icons.cancel,
+                                color: statusColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
-  // =========================================================
-  // DETAIL PESANAN & TOMBOL DOWNLOAD FILE PASTI MUNCUL
-  // =========================================================
   void _showOrderDetail(Map<String, dynamic> order, int index) {
     showModalBottomSheet(
       context: context,
@@ -269,15 +382,18 @@ class _AdminPageState extends State<AdminPage>
                   "Detail Pesanan",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                if (order['status'] != 'Selesai' &&
-                    order['status'] != 'Dibatalkan')
+                if (order['status'] == 'Diproses')
                   TextButton.icon(
                     onPressed: () {
-                      setState(() {
-                        order['status'] = "Dibatalkan";
-                        order['warnaStatus'] = Colors.red;
-                      });
-                      Navigator.pop(context);
+                      Navigator.pop(context); // Tutup modal dulu
+                      _tampilkanKonfirmasi(
+                        "Batalkan Pesanan?",
+                        "Membatalkan pesanan dari dalam menu detail.",
+                        () => setState(() {
+                          order['status'] = "Dibatalkan";
+                          order['warnaStatus'] = Colors.red;
+                        }),
+                      );
                     },
                     icon: const Icon(Icons.cancel, color: Colors.red, size: 16),
                     label: const Text(
@@ -289,7 +405,6 @@ class _AdminPageState extends State<AdminPage>
             ),
             const Divider(),
             ...(order['items'] as List).map((item) {
-              // DETEKSI LAYANAN UNTUK MEMUNCULKAN TOMBOL DOWNLOAD
               String namaLowerCase = (item['nama'] ?? '')
                   .toString()
                   .toLowerCase();
@@ -336,7 +451,6 @@ class _AdminPageState extends State<AdminPage>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // TOMBOL DOWNLOAD FOTO/GAMBAR
                     if (isDesign)
                       IconButton(
                         icon: const Icon(
@@ -353,7 +467,6 @@ class _AdminPageState extends State<AdminPage>
                           );
                         },
                       ),
-                    // TOMBOL DOWNLOAD PDF
                     if (isPrint)
                       IconButton(
                         icon: const Icon(
@@ -378,7 +491,7 @@ class _AdminPageState extends State<AdminPage>
             _buildDetailRow("Ongkir", "Rp ${order['ongkir'] ?? 0}"),
             _buildDetailRow(
               "Pembayaran",
-              "${order['metodeBayar'] ?? order['metodeBayar'] ?? order['pembayaran'] ?? '-'} (LUNAS)",
+              "${order['metodeBayar'] ?? order['pembayaran'] ?? '-'} (LUNAS)",
             ),
             _buildDetailRow("Alamat", order['alamat'] ?? "-"),
             const SizedBox(height: 10),
@@ -422,7 +535,7 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // 2. STOK TAB (DIKEMBALIKAN UTUH)
+  // 2. STOK TAB (DENGAN INDIKATOR WARNING STOK < 5)
   // =========================================================
   Widget _buildStokTab() {
     return Column(
@@ -439,17 +552,61 @@ class _AdminPageState extends State<AdminPage>
           child: ListView.builder(
             itemCount: stokAtkGlobal.length,
             itemBuilder: (context, index) {
+              final item = stokAtkGlobal[index];
+              int stok = item['stok'] ?? 0;
+              bool stokMenipis = stok < 5; // Deteksi Stok Menipis
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: ListTile(
-                  leading: const Icon(Icons.inventory_2),
-                  title: Text(stokAtkGlobal[index]['nama']),
-                  subtitle: Text(
-                    "Stok : ${stokAtkGlobal[index]['stok']} | Rp ${stokAtkGlobal[index]['harga']}",
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  side: BorderSide(
+                    color: stokMenipis
+                        ? Colors.red.shade300
+                        : Colors.transparent,
+                    width: stokMenipis ? 1.5 : 0,
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () => _dialogEditStok(index),
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    Icons.inventory_2,
+                    color: stokMenipis ? Colors.red : primaryColor,
+                  ),
+                  title: Text(
+                    item['nama'],
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: stokMenipis ? Colors.red : Colors.black87,
+                    ),
+                  ),
+                  subtitle: Text(
+                    "Stok : $stok | Rp ${item['harga']}",
+                    style: TextStyle(
+                      color: stokMenipis
+                          ? Colors.red.shade700
+                          : Colors.grey[600],
+                      fontWeight: stokMenipis
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (stokMenipis)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.red,
+                            size: 22,
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _dialogEditStok(index),
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -461,73 +618,93 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // 3. TAB CUSTOMER (FITUR HAPUS AKUN)
+  // 3. TAB CUSTOMER (DENGAN SEARCH & DOUBLE KONFIRMASI HAPUS)
   // =========================================================
   Widget _buildCustomerTab() {
-    if (dataCustomerGlobal.isEmpty) {
-      return const Center(child: Text("Belum ada data customer"));
-    }
-    return ListView.builder(
-      itemCount: dataCustomerGlobal.length,
-      itemBuilder: (context, index) {
-        final customer = dataCustomerGlobal[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person)),
-            title: Text(
-              customer['nama'] ?? 'User',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              customer['nim'] ?? customer['noWa'] ?? 'Data tidak lengkap',
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete_sweep, color: Colors.red),
-              tooltip: "Nonaktifkan/Hapus Akun",
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text("Hapus Akun?"),
-                    content: const Text(
-                      "User ini akan dihapus permanen dan dinonaktifkan.",
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text("Batal"),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            dataCustomerGlobal.removeAt(index);
-                          });
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Akun customer berhasil dihapus"),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "Hapus",
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+    final List filteredCustomers = dataCustomerGlobal.where((customer) {
+      String nama = (customer['nama'] ?? "").toString().toLowerCase();
+      String nim = (customer['nim'] ?? customer['noWa'] ?? "")
+          .toString()
+          .toLowerCase();
+      return nama.contains(_searchCustomer.toLowerCase()) ||
+          nim.contains(_searchCustomer.toLowerCase());
+    }).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: TextField(
+            onChanged: (v) => setState(() => _searchCustomer = v),
+            decoration: InputDecoration(
+              hintText: "Cari nama atau data customer...",
+              prefixIcon: const Icon(Icons.person_search),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: filteredCustomers.isEmpty
+              ? const Center(child: Text("Customer tidak ditemukan"))
+              : ListView.builder(
+                  itemCount: filteredCustomers.length,
+                  itemBuilder: (context, index) {
+                    final customer = filteredCustomers[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      child: ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.person)),
+                        title: Text(
+                          customer['nama'] ?? 'User',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          customer['nim'] ??
+                              customer['noWa'] ??
+                              'Data tidak lengkap',
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.delete_sweep,
+                            color: Colors.red,
+                          ),
+                          tooltip: "Nonaktifkan/Hapus Akun",
+                          onPressed: () => _tampilkanKonfirmasi(
+                            "Hapus Akun Customer?",
+                            "Apakah kamu yakin ingin menghapus permanen akun ${customer['nama']}?",
+                            () {
+                              setState(() {
+                                dataCustomerGlobal.remove(customer);
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Akun customer berhasil dihapus",
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
   // =========================================================
-  // 4. AKADEMIK TAB (DIKEMBALIKAN UTUH)
+  // 4. AKADEMIK TAB (UTUH)
   // =========================================================
   Widget _buildAcademicTab() {
     return Column(
@@ -566,7 +743,7 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // DIALOG EDIT AKADEMIK (DIKEMBALIKAN UTUH)
+  // DIALOG EDIT AKADEMIK (UTUH)
   // =========================================================
   void _dialogEditAkademik(int index) {
     final isEdit = index != -1;
@@ -686,7 +863,7 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // DIALOG EDIT STOK (DIKEMBALIKAN UTUH)
+  // DIALOG EDIT STOK (UTUH)
   // =========================================================
   void _dialogEditStok(int index) {
     final isEdit = index != -1;
