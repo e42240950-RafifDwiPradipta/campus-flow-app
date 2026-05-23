@@ -22,7 +22,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   @override
   void initState() {
     super.initState();
-    // Dengarkan ketikan di alamat untuk update ongkir secara realtime
     _alamatCtrl.addListener(_hitungOngkir);
   }
 
@@ -33,7 +32,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     super.dispose();
   }
 
-  // --- LOGIKA ONGKIR DINAMIS ---
   void _hitungOngkir() {
     if (_metodeAmbil != "Diantar (COD)" || _alamatCtrl.text.isEmpty) {
       setState(() {
@@ -43,17 +41,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return;
     }
 
-    // SIMULASI JARAK
     String alamat = _alamatCtrl.text.toLowerCase();
     if (alamat.contains("kampus") || alamat.contains("polije")) {
-      _estimasiJarak = 2.5; // Dekat kampus
+      _estimasiJarak = 2.5;
     } else if (alamat.contains("mastrip")) {
-      _estimasiJarak = 6.0; // Agak jauh
+      _estimasiJarak = 6.0;
     } else {
       _estimasiJarak = 4.0 + (alamat.length % 5);
     }
 
-    // RUMUS ONGKIR
     int baseOngkir = 3000;
     if (_estimasiJarak <= 5.0) {
       _biayaOngkir = baseOngkir;
@@ -65,7 +61,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     setState(() {});
   }
 
-  // --- LOGIKA PERHITUNGAN BIAYA ---
   int hitungSubtotal() {
     int subtotal = 0;
     for (var item in keranjangGlobal) {
@@ -74,15 +69,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return subtotal;
   }
 
-  // LOGIKA DISKON 10% KHUSUS PRINT > 50 HALAMAN
   int hitungDiskon() {
     int totalDiskon = 0;
     for (var item in keranjangGlobal) {
-      // Cek apakah item ini layanan Print dan halamannya >= 50
       if (item['jenis'] == 'Print' && item.containsKey('jumlahHalaman')) {
         int hal = item['jumlahHalaman'] as int;
         if (hal >= 50) {
-          totalDiskon += ((item['harga'] as int) * 0.10).toInt(); // Diskon 10%
+          totalDiskon += ((item['harga'] as int) * 0.10).toInt();
         }
       }
     }
@@ -90,7 +83,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   int hitungTotal() {
-    // Total = Subtotal + Ongkir - Diskon
     return hitungSubtotal() + _biayaOngkir - hitungDiskon();
   }
 
@@ -136,7 +128,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   ),
                   onTap: () {
                     _alamatCtrl.text = alamatMap['detail'];
-                    _hitungOngkir(); // Update ongkir setelah pilih
+                    _hitungOngkir();
                     Navigator.pop(context);
                   },
                 ),
@@ -187,7 +179,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 const SizedBox(height: 15),
                 _buildSectionCard("Pembayaran", _buildMetodeBayarSection()),
                 const SizedBox(height: 15),
-                _buildRingkasanBiaya(), // Di sini letak diskonnya muncul
+                _buildRingkasanBiaya(),
               ],
             ),
           ),
@@ -249,7 +241,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       ),
                     ),
                     Text(
-                      item['detail'] ?? "",
+                      item['spesifikasi'] ?? item['detail'] ?? "",
                       style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
@@ -332,7 +324,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ),
           ),
-          // INFO ONGKIR REALTIME
           if (_estimasiJarak > 0)
             Container(
               margin: const EdgeInsets.only(top: 10),
@@ -388,8 +379,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildRingkasanBiaya() {
-    int diskon = hitungDiskon(); // Ambil nilai diskon
-
+    int diskon = hitungDiskon();
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -415,8 +405,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ],
           ),
-
-          // MUNCULKAN DISKON JIKA ADA (Halaman Print >= 50)
           if (diskon > 0) ...[
             const SizedBox(height: 8),
             Row(
@@ -441,7 +429,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ],
             ),
           ],
-
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -514,7 +501,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   );
                   return;
                 }
-
                 if (_metodeBayar == "QRIS") {
                   _tampilkanDialogQRIS();
                 } else {
@@ -626,11 +612,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   void _prosesSimpanData() {
+    // Memastikan seluruh data detail item masuk ke dalam nota
+    List<Map<String, dynamic>> itemsFinal = keranjangGlobal.map((item) {
+      return {
+        'nama': item['nama'],
+        'harga': item['harga'],
+        'jumlah': item['jumlah'] ?? 1,
+        'spesifikasi': item['spesifikasi'] ?? item['detail'] ?? '-',
+        'catatan': item['catatan'] ?? item['note'] ?? '-',
+        'file': item['file'], // Untuk Download PDF Admin
+        'referensi':
+            item['referensi'] ?? item['foto'], // Untuk Foto Jasa Desain
+      };
+    }).toList();
+
     Map<String, dynamic> notaBaru = {
+      'id':
+          "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
       'noPesanan':
           "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
-      'items': List.from(keranjangGlobal),
-      'total': hitungTotal(), // Sudah terpotong diskon
+      'items': itemsFinal,
+      'subtotal': hitungSubtotal(),
+      'diskon': hitungDiskon(),
+      'ongkir': _biayaOngkir,
+      'total': hitungTotal(),
       'metodeAmbil': _metodeAmbil,
       'metodeBayar': _metodeBayar,
       'alamat': _metodeAmbil == "Diantar (COD)"
@@ -638,13 +643,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
           : "Ambil di Tempat",
       'tanggal': DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now()),
       'status': 'Diproses',
+      'warnaStatus': Colors.orange,
     };
 
     setState(() {
-      daftarPesananGlobal.add(notaBaru);
+      daftarPesananGlobal.insert(0, notaBaru); // Masukkan ke paling atas daftar
+      keranjangGlobal.clear(); // Bersihkan keranjang setelah belanja
     });
 
-    Navigator.push(
+    Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (context) => NotaSuksesPage(dataNota: notaBaru),

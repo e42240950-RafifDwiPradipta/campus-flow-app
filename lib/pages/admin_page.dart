@@ -27,8 +27,13 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // BUILD UTAMA
+  // LOGIKA HITUNG PENDAPATAN (Hanya yang Selesai)
   // =========================================================
+  int _hitungTotalPendapatan() {
+    return daftarPesananGlobal
+        .where((order) => order['status'] == 'Selesai')
+        .fold(0, (sum, item) => sum + (item['total'] as int? ?? 0));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +74,6 @@ class _AdminPageState extends State<AdminPage>
   // =========================================================
   // HEADER & STAT CARD
   // =========================================================
-
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
@@ -90,47 +94,44 @@ class _AdminPageState extends State<AdminPage>
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.arrow_back, color: Colors.white),
           ),
-          const SizedBox(height: 10),
           const Padding(
             padding: EdgeInsets.only(left: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Admin Dashboard",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  "Kelola pesanan, stok, dan jadwal akademik",
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ],
+            child: Text(
+              "Admin Dashboard",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              _buildStatCard(
-                Icons.shopping_cart,
-                daftarPesananGlobal.length.toString(),
-                "Pesanan",
-              ),
-              _buildStatCard(
-                Icons.people,
-                dataCustomerGlobal.length.toString(),
-                "Customer",
-              ),
-              _buildStatCard(
-                Icons.inventory,
-                stokAtkGlobal.length.toString(),
-                "Produk",
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildStatCard(
+                  Icons.shopping_cart,
+                  "${daftarPesananGlobal.length}",
+                  "Pesanan",
+                ),
+                _buildStatCard(
+                  Icons.monetization_on,
+                  "Rp ${_hitungTotalPendapatan()}",
+                  "Pendapatan",
+                ),
+                _buildStatCard(
+                  Icons.people,
+                  "${dataCustomerGlobal.length}",
+                  "Customer",
+                ),
+                _buildStatCard(
+                  Icons.inventory,
+                  "${stokAtkGlobal.length}",
+                  "Produk",
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -138,40 +139,40 @@ class _AdminPageState extends State<AdminPage>
   }
 
   Widget _buildStatCard(IconData icon, String value, String title) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white12,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(height: 8),
-            Text(
+    return Container(
+      width: 120,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white12,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 20),
+          const SizedBox(height: 8),
+          FittedBox(
+            child: Text(
               value,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white70, fontSize: 10),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white70, fontSize: 10),
+          ),
+        ],
       ),
     );
   }
 
   // =========================================================
-  // 1. PESANAN TAB (DENGAN FITUR BATAL)
+  // 1. TAB PESANAN
   // =========================================================
-
   Widget _buildPesananTab() {
     if (daftarPesananGlobal.isEmpty) {
       return const Center(
@@ -187,10 +188,8 @@ class _AdminPageState extends State<AdminPage>
       itemCount: daftarPesananGlobal.length,
       itemBuilder: (context, index) {
         final order = daftarPesananGlobal[index];
-
-        String orderId =
-            order['id'] ?? order['idPesanan'] ?? "CAMPUS-000${index + 1}";
-        int total = order['total'] ?? 0;
+        String orderId = (order['id'] ?? order['noPesanan'] ?? "CAMPUS-000")
+            .toString();
         String status = order['status'] ?? "Diproses";
         Color statusColor = order['warnaStatus'] ?? Colors.orange;
 
@@ -200,17 +199,11 @@ class _AdminPageState extends State<AdminPage>
             borderRadius: BorderRadius.circular(20),
           ),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 8,
-            ),
             onTap: () => _showOrderDetail(order, index),
             leading: CircleAvatar(
               backgroundColor: statusColor,
               child: Icon(
-                status == "Dibatalkan"
-                    ? Icons.cancel_outlined
-                    : Icons.receipt_long,
+                status == "Dibatalkan" ? Icons.cancel : Icons.receipt,
                 color: Colors.white,
               ),
             ),
@@ -218,51 +211,35 @@ class _AdminPageState extends State<AdminPage>
               orderId,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text("$status - Rp $total"),
-
-            // Logika Tombol Trailing (Selesai & Batal)
-            trailing: status == "Selesai"
-                ? const Icon(Icons.check_circle, color: Colors.green, size: 32)
-                : status == "Dibatalkan"
-                ? const Icon(Icons.cancel, color: Colors.red, size: 32)
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.cancel_outlined,
-                          color: Colors.red,
-                        ),
-                        tooltip: "Batalkan Pesanan",
-                        onPressed: () {
-                          setState(() {
-                            daftarPesananGlobal[index]['status'] = "Dibatalkan";
-                            daftarPesananGlobal[index]['warnaStatus'] =
-                                Colors.red;
-                          });
-                        },
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            daftarPesananGlobal[index]['status'] = "Selesai";
-                            daftarPesananGlobal[index]['warnaStatus'] =
-                                Colors.green;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.green,
-                          elevation: 0,
-                          side: const BorderSide(color: Colors.green),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text("Selesai"),
-                      ),
-                    ],
+            subtitle: Text("$status - Rp ${order['total']}"),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (status == "Diproses") ...[
+                  IconButton(
+                    icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                    onPressed: () => setState(() {
+                      order['status'] = "Dibatalkan";
+                      order['warnaStatus'] = Colors.red;
+                    }),
                   ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.green,
+                    ),
+                    onPressed: () => setState(() {
+                      order['status'] = "Selesai";
+                      order['warnaStatus'] = Colors.green;
+                    }),
+                  ),
+                ] else
+                  Icon(
+                    status == "Selesai" ? Icons.check_circle : Icons.cancel,
+                    color: statusColor,
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -270,277 +247,174 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // LOGIKA DETAIL PESANAN & DOWNLOAD PDF PINTAR
+  // DETAIL PESANAN & TOMBOL DOWNLOAD FILE PASTI MUNCUL
   // =========================================================
   void _showOrderDetail(Map<String, dynamic> order, int index) {
-    List items = order['items'] ?? [];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            top: 24,
-            left: 24,
-            right: 24,
-            bottom: MediaQuery.of(context).padding.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Detail Pesanan",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "Detail Riwayat",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 15),
-
-              // ====================================================
-              // PENGURAIAN ITEM LENGKAP (SAMA PERSIS DENGAN USER)
-              // ====================================================
-              ...items.map((item) {
-                String namaItem = item['nama']?.toString().toLowerCase() ?? '';
-                bool isPrint =
-                    namaItem.contains('print') ||
-                    namaItem.contains('dokumen') ||
-                    item['file'] != null;
-
-                // 1. Ekstrak Subtitle / Spesifikasi
-                String subtitle = "";
-                if (item['spesifikasi'] != null) {
-                  subtitle = item['spesifikasi'];
-                } else if (item['subtitle'] != null) {
-                  subtitle = item['subtitle'];
-                } else {
-                  List<String> subParts = [];
-                  if (item['ukuranKertas'] != null)
-                    subParts.add(item['ukuranKertas']);
-                  if (item['jumlahHalaman'] != null)
-                    subParts.add("${item['jumlahHalaman']} Hal");
-                  if (item['halaman'] != null && item['jumlahHalaman'] == null)
-                    subParts.add("${item['halaman']} Hal");
-                  if (item['warna'] != null) subParts.add(item['warna']);
-                  if (item['pakaiJilid'] == true ||
-                      item['jilid'] == true ||
-                      item['jilid'] == 'Ya')
-                    subParts.add("Jilid");
-
-                  if (item['pesanan'] != null) subParts.add(item['pesanan']);
-                  if (item['menu'] != null) subParts.add(item['menu']);
-
-                  if (namaItem.contains('desain') ||
-                      namaItem.contains('design')) {
-                    subParts.add("File: ${item['file'] ?? 'Tidak ada'}");
-                  }
-
-                  subtitle = subParts.isNotEmpty
-                      ? subParts.join(", ")
-                      : "${item['jumlah'] ?? 1} pcs";
-                }
-
-                // 2. Ekstrak Notes (WA, Detail, Catatan Gabungan)
-                String catatanRaw = item['catatan'] ?? item['note'] ?? '';
-                String noWa = item['noWa'] ?? item['whatsapp'] ?? '';
-                String detail = item['detail'] ?? '';
-
-                List<String> noteParts = [];
-                if (noWa.isNotEmpty) noteParts.add("WA: $noWa");
-                if (detail.isNotEmpty && !namaItem.contains('titip'))
-                  noteParts.add("Detail: $detail");
-                if (catatanRaw.isNotEmpty) noteParts.add(catatanRaw);
-
-                String finalNote = noteParts.join(" | ");
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Ikon (Persis Tampilan User)
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Icon(
-                          isPrint
-                              ? Icons.description_outlined
-                              : Icons.shopping_bag_outlined,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-
-                      // Informasi Teks Ekstra Lengkap
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['nama'] ?? 'Item',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              subtitle,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            if (finalNote.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                "Note: $finalNote",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-
-                      // Harga & Tombol Download PDF
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            "Rp ${item['harga'] ?? 0}",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          if (isPrint) ...[
-                            const SizedBox(height: 8),
-                            InkWell(
-                              onTap: () {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "Mengunduh file PDF ke perangkat...",
-                                    ),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.green),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.download_rounded,
-                                      color: Colors.green,
-                                      size: 14,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      "PDF",
-                                      style: TextStyle(
-                                        color: Colors.green,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-
-              const Divider(height: 30),
-
-              // Menampilkan Info Tambahan dengan Key yang Benar (Sama dengan User)
-              _buildDetailRow(
-                "Metode Ambil",
-                order['metodeAmbil'] ?? order['metode'] ?? "-",
-              ),
-              _buildDetailRow(
-                "Pembayaran",
-                order['metodePembayaran'] ??
-                    order['metodeBayar'] ??
-                    order['pembayaran'] ??
-                    "-",
-              ),
-              _buildDetailRow("Alamat", order['alamat'] ?? "-"),
-
-              const SizedBox(height: 15),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "Total Bayar",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  Text(
-                    "Rp ${order['total'] ?? 0}",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: primaryColor,
+                if (order['status'] != 'Selesai' &&
+                    order['status'] != 'Dibatalkan')
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        order['status'] = "Dibatalkan";
+                        order['warnaStatus'] = Colors.red;
+                      });
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.cancel, color: Colors.red, size: 16),
+                    label: const Text(
+                      "Batalkan",
+                      style: TextStyle(color: Colors.red, fontSize: 13),
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+            const Divider(),
+            ...(order['items'] as List).map((item) {
+              // DETEKSI LAYANAN UNTUK MEMUNCULKAN TOMBOL DOWNLOAD
+              String namaLowerCase = (item['nama'] ?? '')
+                  .toString()
+                  .toLowerCase();
+              bool isPrint = namaLowerCase.contains('print');
+              bool isDesign =
+                  namaLowerCase.contains('desain') ||
+                  namaLowerCase.contains('design') ||
+                  namaLowerCase.contains('foto');
+
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  item['nama'] ?? 'Item',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['spesifikasi'] ?? '',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    Text(
+                      "Note: ${item['catatan'] ?? item['note'] ?? '-'}",
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Rp ${item['harga'] ?? 0}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // TOMBOL DOWNLOAD FOTO/GAMBAR
+                    if (isDesign)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.image,
+                          color: Colors.blue,
+                          size: 20,
+                        ),
+                        tooltip: "Unduh Foto/Referensi",
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Mengunduh Foto/Referensi..."),
+                            ),
+                          );
+                        },
+                      ),
+                    // TOMBOL DOWNLOAD PDF
+                    if (isPrint)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.picture_as_pdf,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        tooltip: "Unduh Dokumen PDF",
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Mengunduh Dokumen PDF..."),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+            const Divider(),
+            _buildDetailRow("Ongkir", "Rp ${order['ongkir'] ?? 0}"),
+            _buildDetailRow(
+              "Pembayaran",
+              "${order['metodeBayar'] ?? order['metodeBayar'] ?? order['pembayaran'] ?? '-'} (LUNAS)",
+            ),
+            _buildDetailRow("Alamat", order['alamat'] ?? "-"),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Total Bayar",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                Text(
+                  "Rp ${order['total']}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildDetailRow(String title, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-            flex: 2,
-            child: Text(title, style: const TextStyle(color: Colors.grey)),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
           ),
         ],
       ),
@@ -548,9 +422,8 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // 2. STOK TAB
+  // 2. STOK TAB (DIKEMBALIKAN UTUH)
   // =========================================================
-
   Widget _buildStokTab() {
     return Column(
       children: [
@@ -588,19 +461,65 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // 3. CUSTOMER TAB
+  // 3. TAB CUSTOMER (FITUR HAPUS AKUN)
   // =========================================================
-
   Widget _buildCustomerTab() {
+    if (dataCustomerGlobal.isEmpty) {
+      return const Center(child: Text("Belum ada data customer"));
+    }
     return ListView.builder(
       itemCount: dataCustomerGlobal.length,
       itemBuilder: (context, index) {
+        final customer = dataCustomerGlobal[index];
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: ListTile(
             leading: const CircleAvatar(child: Icon(Icons.person)),
-            title: Text(dataCustomerGlobal[index]['nama'] ?? ''),
-            subtitle: Text(dataCustomerGlobal[index]['nim'] ?? ''),
+            title: Text(
+              customer['nama'] ?? 'User',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              customer['nim'] ?? customer['noWa'] ?? 'Data tidak lengkap',
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_sweep, color: Colors.red),
+              tooltip: "Nonaktifkan/Hapus Akun",
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("Hapus Akun?"),
+                    content: const Text(
+                      "User ini akan dihapus permanen dan dinonaktifkan.",
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text("Batal"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            dataCustomerGlobal.removeAt(index);
+                          });
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Akun customer berhasil dihapus"),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "Hapus",
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         );
       },
@@ -608,9 +527,8 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // 4. AKADEMIK TAB
+  // 4. AKADEMIK TAB (DIKEMBALIKAN UTUH)
   // =========================================================
-
   Widget _buildAcademicTab() {
     return Column(
       children: [
@@ -648,9 +566,8 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // DIALOG EDIT (AKADEMIK)
+  // DIALOG EDIT AKADEMIK (DIKEMBALIKAN UTUH)
   // =========================================================
-
   void _dialogEditAkademik(int index) {
     final isEdit = index != -1;
     final tCtrl = TextEditingController(
@@ -769,9 +686,8 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // DIALOG EDIT (STOK)
+  // DIALOG EDIT STOK (DIKEMBALIKAN UTUH)
   // =========================================================
-
   void _dialogEditStok(int index) {
     final isEdit = index != -1;
     final nCtrl = TextEditingController(

@@ -68,7 +68,7 @@ class NotaSuksesPage extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          dataNota['noPesanan'],
+                          dataNota['noPesanan'] ?? dataNota['id'] ?? '-',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: primaryTeal,
@@ -78,7 +78,7 @@ class NotaSuksesPage extends StatelessWidget {
                     ),
                     const Divider(height: 30),
 
-                    // Detail Item
+                    // Detail Item (DIREVISI AGAR LENGKAP)
                     const Text(
                       "ITEM DIPESAN",
                       style: TextStyle(
@@ -90,14 +90,43 @@ class NotaSuksesPage extends StatelessWidget {
                     const SizedBox(height: 10),
                     ...(dataNota['items'] as List).map(
                       (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: Text(
-                                item['nama'],
-                                style: const TextStyle(fontSize: 13),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item['nama'],
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  // Munculkan spesifikasi (A4, Jilid, dll)
+                                  if (item['spesifikasi'] != null &&
+                                      item['spesifikasi'] != '-')
+                                    Text(
+                                      item['spesifikasi'],
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  // Munculkan catatan (Nasi Pecel, No WA, dll)
+                                  if (item['catatan'] != null &&
+                                      item['catatan'] != '-')
+                                    Text(
+                                      "Note: ${item['catatan']}",
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.orange,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             Text(
@@ -114,7 +143,7 @@ class NotaSuksesPage extends StatelessWidget {
 
                     const Divider(height: 30),
 
-                    // --- TAMBAHAN RINCIAN BIAYA & DISKON ---
+                    // --- RINCIAN BIAYA & DISKON ---
                     const Text(
                       "RINCIAN BIAYA",
                       style: TextStyle(
@@ -142,13 +171,15 @@ class NotaSuksesPage extends StatelessWidget {
                       ),
 
                     const Divider(height: 30),
-                    // ----------------------------------------
 
                     // Info Pengiriman & Bayar
-                    _buildNotaRow("Tanggal", dataNota['tanggal']),
-                    _buildNotaRow("Metode Ambil", dataNota['metodeAmbil']),
-                    _buildNotaRow("Pembayaran", dataNota['metodeBayar']),
-                    _buildNotaRow("Alamat", dataNota['alamat']),
+                    _buildNotaRow("Tanggal", dataNota['tanggal'] ?? "-"),
+                    _buildNotaRow(
+                      "Metode Ambil",
+                      dataNota['metodeAmbil'] ?? "-",
+                    ),
+                    _buildNotaRow("Pembayaran", dataNota['metodeBayar'] ?? "-"),
+                    _buildNotaRow("Alamat", dataNota['alamat'] ?? "-"),
 
                     const Divider(height: 30),
 
@@ -182,8 +213,8 @@ class NotaSuksesPage extends StatelessWidget {
               // Tombol Kembali ke Beranda
               ElevatedButton(
                 onPressed: () {
-                  // KOSONGKAN KERANJANG SETELAH SUKSES
-                  keranjangGlobal.clear();
+                  // Keranjang sudah dikosongkan di CheckoutPage,
+                  // di sini kita hanya navigasi balik.
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (context) => const HomePage()),
@@ -218,6 +249,7 @@ class NotaSuksesPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(width: 20),
           Flexible(
             child: Text(
               value,
