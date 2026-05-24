@@ -114,6 +114,7 @@ class _AtkPageState extends State<AtkPage> {
   Widget _buildProductCard(Map<String, dynamic> item) {
     final String nama = item['nama'];
     final int qty = _jumlahBeli[nama] ?? 0;
+    String? urlGambar = item['gambar'];
 
     return Container(
       decoration: BoxDecoration(
@@ -130,7 +131,9 @@ class _AtkPageState extends State<AtkPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Gambar Produk
+          // =========================================================
+          // MODIFIKASI UTAMA: MENAMPILKAN FOTO PRODUK SUNGUHAN
+          // =========================================================
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -140,13 +143,35 @@ class _AtkPageState extends State<AtkPage> {
                 ),
               ),
               width: double.infinity,
+              alignment: Alignment.center,
               child: Hero(
                 tag: nama,
-                child: Icon(
-                  item['ikon'] ?? Icons.inventory_2,
-                  size: 60,
-                  color: primaryTeal,
-                ),
+                // Logika: Cek apakah ada link gambar internet
+                child: urlGambar != null && urlGambar.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
+                        child: Image.network(
+                          urlGambar,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                          // Trik Pengaman: Kalau link mati atau internet off, otomatis tampilin Icon
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              item['ikon'] ?? Icons.inventory_2,
+                              size: 60,
+                              color: primaryTeal,
+                            );
+                          },
+                        ),
+                      )
+                    : Icon(
+                        item['ikon'] ?? Icons.inventory_2,
+                        size: 60,
+                        color: primaryTeal,
+                      ),
               ),
             ),
           ),
@@ -173,7 +198,7 @@ class _AtkPageState extends State<AtkPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Rp ${item['harga']}",
+                  formatRupiah(item['harga']),
                   style: TextStyle(
                     color: primaryTeal,
                     fontWeight: FontWeight.w900,

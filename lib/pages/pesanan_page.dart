@@ -41,7 +41,7 @@ class PesananPage extends StatelessWidget {
           Icon(Icons.assignment_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 15),
           const Text(
-            "Belum ada pesanan nih, Fif!",
+            "Belum ada pesanan nih",
             style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
           ),
         ],
@@ -106,7 +106,7 @@ class PesananPage extends StatelessWidget {
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(height: 1),
+                child: Divider(height: 1, thickness: 1, color: Colors.black12),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -115,8 +115,9 @@ class PesananPage extends StatelessWidget {
                     "${(order['items'] as List).length} Produk",
                     style: const TextStyle(fontSize: 13, color: Colors.black87),
                   ),
+                  // --- PERBAIKAN: Format Rupiah di Total Card ---
                   Text(
-                    "Rp ${order['total']}",
+                    formatRupiah(order['total']),
                     style: TextStyle(
                       color: themeColor,
                       fontWeight: FontWeight.bold,
@@ -163,6 +164,10 @@ class PesananPage extends StatelessWidget {
   void _showDetail(BuildContext context, Map<String, dynamic> order) {
     List items = order['items'] ?? [];
     const Color primaryTeal = Color(0xFF1B4D5C);
+
+    // Logika status bayar
+    String metodeBayar = order['metodeBayar'] ?? '-';
+    String statusLunas = metodeBayar == 'QRIS' ? '(LUNAS)' : '(BAYAR NANTI)';
 
     showModalBottomSheet(
       context: context,
@@ -254,8 +259,9 @@ class PesananPage extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // --- PERBAIKAN: Format Rupiah Harga Item ---
                     Text(
-                      "Rp ${item['harga']}",
+                      formatRupiah(item['harga']),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -263,28 +269,29 @@ class PesananPage extends StatelessWidget {
               );
             }).toList(),
 
-            const Divider(height: 30),
+            const Divider(height: 30, thickness: 1, color: Colors.black12),
 
             // ====================================================
             // RINCIAN BIAYA (SAMA DENGAN NOTA SUKSES)
             // ====================================================
+            // --- PERBAIKAN: Format Rupiah Subtotal, Ongkir, Diskon ---
             _buildDetailRow(
               "Subtotal Produk",
-              "Rp ${order['subtotal'] ?? _hitungSubtotalManual(items)}",
+              formatRupiah(order['subtotal'] ?? _hitungSubtotalManual(items)),
             ),
-            _buildDetailRow("Ongkos Kirim", "Rp ${order['ongkir'] ?? 0}"),
+            _buildDetailRow("Ongkos Kirim", formatRupiah(order['ongkir'] ?? 0)),
 
             if ((order['diskon'] ?? 0) > 0)
               _buildDetailRow(
                 "Diskon Promo Print",
-                "- Rp ${order['diskon']}",
+                "- ${formatRupiah(order['diskon'])}",
                 isGreen: true,
               ),
 
             const SizedBox(height: 10),
 
             _buildDetailRow("Metode Ambil", order['metodeAmbil'] ?? "-"),
-            _buildDetailRow("Pembayaran", order['metodeBayar'] ?? "-"),
+            _buildDetailRow("Pembayaran", "$metodeBayar $statusLunas"),
             if (order['alamat'] != null &&
                 order['alamat'] != "-" &&
                 order['metodeAmbil'] == "Diantar (COD)")
@@ -300,8 +307,9 @@ class PesananPage extends StatelessWidget {
                   "Total Bayar",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
+                // --- PERBAIKAN: Format Rupiah Total Bayar Akhir ---
                 Text(
-                  "Rp ${order['total']}",
+                  formatRupiah(order['total']),
                   style: const TextStyle(
                     color: primaryTeal,
                     fontWeight: FontWeight.bold,

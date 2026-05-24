@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'pages/splash_screen.dart';
+import 'package:intl/intl.dart';
 
 // --- GUDANG DATA GLOBAL CAMPUS FLOW ---
 
@@ -61,6 +62,15 @@ List<Map<String, dynamic>> dataKalenderGlobal = [
     "markerEnd": DateTime(2026, 6, 12),
   },
 ];
+
+// Fungsi Global Format Rupiah
+String formatRupiah(num angka) {
+  return NumberFormat.currency(
+    locale: 'id',
+    symbol: 'Rp ',
+    decimalDigits: 0,
+  ).format(angka);
+}
 
 void main() {
   runApp(const CampusFlowApp());

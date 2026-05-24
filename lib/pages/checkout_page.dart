@@ -248,7 +248,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
               ),
               Text(
-                "Rp ${item['harga']}",
+                formatRupiah(item['harga']),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -342,7 +342,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Estimasi Jarak: ${_estimasiJarak.toStringAsFixed(1)} km\nOngkos Kirim: Rp $_biayaOngkir",
+                      "Estimasi Jarak: ${_estimasiJarak.toStringAsFixed(1)} km\nOngkos Kirim: ${formatRupiah(_biayaOngkir)}",
                       style: const TextStyle(
                         fontSize: 11,
                         color: Colors.orange,
@@ -397,7 +397,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
               Text(
-                "Rp ${hitungSubtotal()}",
+                formatRupiah(hitungSubtotal()),
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
@@ -419,7 +419,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   ),
                 ),
                 Text(
-                  "- Rp $diskon",
+                  "- ${formatRupiah(diskon)}",
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -438,7 +438,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
               Text(
-                "Rp $_biayaOngkir",
+                formatRupiah(_biayaOngkir),
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
@@ -480,7 +480,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  "Rp ${hitungTotal()}",
+                  formatRupiah(hitungTotal()),
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -504,7 +504,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 if (_metodeBayar == "QRIS") {
                   _tampilkanDialogQRIS();
                 } else {
-                  _prosesSimpanData();
+                  _jalankanLoadingDanSimpan();
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -570,7 +570,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
             Text(
-              "Rp ${hitungTotal()}",
+              formatRupiah(hitungTotal()),
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -581,7 +581,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                _prosesSimpanData();
+                _jalankanLoadingDanSimpan();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryTeal,
@@ -611,11 +611,46 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  void _jalankanLoadingDanSimpan() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(30.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: primaryTeal),
+                const SizedBox(height: 25),
+                const Text(
+                  "Memproses Pesanan...",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Mohon tunggu sebentar ya.",
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    Future.delayed(const Duration(seconds: 2), () {
+      Navigator.pop(context);
+      _prosesSimpanData();
+    });
+  }
+
   void _prosesSimpanData() {
     List<Map<String, dynamic>> itemsFinal = keranjangGlobal.map((item) {
-      // =========================================================
-      // PENDETEKSI JUMLAH (EKSTRAK ANGKA DARI STRING JIKA DIPERLUKAN)
-      // =========================================================
       int qty = 1;
       if (item['jumlah'] != null) {
         qty = item['jumlah'] is int
@@ -623,7 +658,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
             : int.tryParse(item['jumlah'].toString()) ?? 1;
       } else if (item['detail'] != null &&
           item['detail'].toString().contains('pcs')) {
-        // Ekstrak angka otomatis dari string (misal: "Produk ATK (21 pcs)")
         final match = RegExp(
           r'\((\d+)\s*pcs\)',
         ).firstMatch(item['detail'].toString());
@@ -635,7 +669,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return {
         'nama': item['nama'],
         'harga': item['harga'],
-        'jumlah': qty, // Menggunakan angka hasil ekstraksi
+        'jumlah': qty,
         'spesifikasi': item['spesifikasi'] ?? item['detail'] ?? '-',
         'catatan': item['catatan'] ?? item['note'] ?? '-',
         'file': item['file'],
@@ -643,9 +677,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
       };
     }).toList();
 
-    // =========================================================
-    // LOGIKA PEMOTONGAN STOK ATK YANG PRESISI
-    // =========================================================
     for (var itemFinal in itemsFinal) {
       for (var stokItem in stokAtkGlobal) {
         if (stokItem['nama'] == itemFinal['nama']) {
@@ -653,12 +684,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
           int stokDipotong = itemFinal['jumlah'] as int;
 
           stokItem['stok'] = stokAwal - stokDipotong;
-          if ((stokItem['stok'] as int) < 0)
-            stokItem['stok'] = 0; // Biar tidak minus
+          if ((stokItem['stok'] as int) < 0) stokItem['stok'] = 0;
         }
       }
     }
 
+    // =========================================================
+    // PERBAIKAN: LOGIKA STATUS DINAMIS BERDASARKAN METODE BAYAR
+    // =========================================================
     Map<String, dynamic> notaBaru = {
       'id':
           "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
@@ -675,8 +708,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ? _alamatCtrl.text
           : "Ambil di Tempat",
       'tanggal': DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now()),
-      'status': 'Diproses',
-      'warnaStatus': Colors.orange,
+
+      // Jika pakai QRIS -> Langsung Diproses (Biru)
+      // Jika pakai Tunai -> Menunggu Pembayaran (Oranye)
+      'status': _metodeBayar == "QRIS" ? 'Diproses' : 'Menunggu Pembayaran',
+      'warnaStatus': _metodeBayar == "QRIS" ? Colors.blue : Colors.orange,
     };
 
     setState(() {

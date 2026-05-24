@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../main.dart'; // Akses keranjangGlobal
+import '../main.dart'; // Akses keranjangGlobal & formatRupiah
 import 'keranjang_page.dart';
 
 class PrintFeaturePage extends StatefulWidget {
@@ -309,7 +309,6 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
           "Jumlah Halaman",
           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        // Desain Counter Modern (Menyatu dalam box)
         Container(
           decoration: BoxDecoration(
             color: Colors.grey[50],
@@ -431,8 +430,9 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
                 "Estimasi Total",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
+              // --- PERUBAHAN: Format Rupiah Estimasi Print ---
               Text(
-                "Rp $_estimasiTotal",
+                formatRupiah(_estimasiTotal),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,

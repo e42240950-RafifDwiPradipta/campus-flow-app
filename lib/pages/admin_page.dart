@@ -14,9 +14,6 @@ class _AdminPageState extends State<AdminPage>
   late TabController _tabController;
   final Color primaryColor = const Color(0xFF114B5F);
 
-  // =========================================================
-  // STATE UNTUK FITUR SEARCH & FILTER
-  // =========================================================
   String _searchPesanan = "";
   String _filterPesanan = "Semua";
   String _searchCustomer = "";
@@ -33,18 +30,12 @@ class _AdminPageState extends State<AdminPage>
     super.dispose();
   }
 
-  // =========================================================
-  // LOGIKA HITUNG PENDAPATAN (Hanya yang Selesai)
-  // =========================================================
   int _hitungTotalPendapatan() {
     return daftarPesananGlobal
         .where((order) => order['status'] == 'Selesai')
         .fold(0, (sum, item) => sum + (item['total'] as int? ?? 0));
   }
 
-  // =========================================================
-  // HELPER: DIALOG DOUBLE KONFIRMASI (ANTI SALAH PENCET)
-  // =========================================================
   void _tampilkanKonfirmasi(
     String judul,
     String pesan,
@@ -59,7 +50,13 @@ class _AdminPageState extends State<AdminPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+            child: Text(
+              "Batal",
+              style: TextStyle(
+                color: Colors.grey[800],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -67,7 +64,13 @@ class _AdminPageState extends State<AdminPage>
               Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
-            child: const Text("Ya, Lanjutkan"),
+            child: const Text(
+              "Ya, Lanjutkan",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -110,9 +113,6 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // HEADER & STAT CARD
-  // =========================================================
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
@@ -156,7 +156,7 @@ class _AdminPageState extends State<AdminPage>
                 ),
                 _buildStatCard(
                   Icons.monetization_on,
-                  "Rp ${_hitungTotalPendapatan()}",
+                  formatRupiah(_hitungTotalPendapatan()),
                   "Pendapatan",
                 ),
                 _buildStatCard(
@@ -209,11 +209,7 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // 1. TAB PESANAN (DENGAN SEARCH & FILTER)
-  // =========================================================
   Widget _buildPesananTab() {
-    // Logika Filter & Search
     final List filteredOrders = daftarPesananGlobal.where((order) {
       String id = (order['id'] ?? order['noPesanan'] ?? "")
           .toString()
@@ -227,7 +223,6 @@ class _AdminPageState extends State<AdminPage>
 
     return Column(
       children: [
-        // AREA SEARCH & FILTER CHIPS
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 15, 20, 5),
           child: TextField(
@@ -248,30 +243,34 @@ class _AdminPageState extends State<AdminPage>
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 15),
           child: Row(
-            children: ["Semua", "Diproses", "Selesai", "Dibatalkan"].map((
-              status,
-            ) {
-              bool isSelected = _filterPesanan == status;
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: ChoiceChip(
-                  label: Text(status),
-                  selected: isSelected,
-                  selectedColor: primaryColor.withOpacity(0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected ? primaryColor : Colors.black,
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                  onSelected: (v) => setState(() => _filterPesanan = status),
-                ),
-              );
-            }).toList(),
+            children:
+                [
+                  "Semua",
+                  "Diproses",
+                  "Menunggu Pembayaran",
+                  "Selesai",
+                  "Dibatalkan",
+                ].map((status) {
+                  bool isSelected = _filterPesanan == status;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: ChoiceChip(
+                      label: Text(status),
+                      selected: isSelected,
+                      selectedColor: primaryColor.withOpacity(0.2),
+                      labelStyle: TextStyle(
+                        color: isSelected ? primaryColor : Colors.black,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                      onSelected: (v) =>
+                          setState(() => _filterPesanan = status),
+                    ),
+                  );
+                }).toList(),
           ),
         ),
-
-        // LIST PESANAN
         Expanded(
           child: filteredOrders.isEmpty
               ? const Center(
@@ -311,11 +310,14 @@ class _AdminPageState extends State<AdminPage>
                           orderId,
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        subtitle: Text("$status - Rp ${order['total']}"),
+                        subtitle: Text(
+                          "$status - ${formatRupiah(order['total'])}",
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (status == "Diproses") ...[
+                            if (status == "Diproses" ||
+                                status == "Menunggu Pembayaran") ...[
                               IconButton(
                                 icon: const Icon(
                                   Icons.cancel_outlined,
@@ -337,7 +339,7 @@ class _AdminPageState extends State<AdminPage>
                                 ),
                                 onPressed: () => _tampilkanKonfirmasi(
                                   "Selesaikan Pesanan?",
-                                  "Pastikan barang sudah diterima oleh pelanggan.",
+                                  "Pastikan barang sudah diterima/dibayar oleh pelanggan.",
                                   () => setState(() {
                                     order['status'] = "Selesai";
                                     order['warnaStatus'] = Colors.green;
@@ -382,10 +384,11 @@ class _AdminPageState extends State<AdminPage>
                   "Detail Pesanan",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                if (order['status'] == 'Diproses')
+                if (order['status'] == 'Diproses' ||
+                    order['status'] == 'Menunggu Pembayaran')
                   TextButton.icon(
                     onPressed: () {
-                      Navigator.pop(context); // Tutup modal dulu
+                      Navigator.pop(context);
                       _tampilkanKonfirmasi(
                         "Batalkan Pesanan?",
                         "Membatalkan pesanan dari dalam menu detail.",
@@ -444,7 +447,7 @@ class _AdminPageState extends State<AdminPage>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "Rp ${item['harga'] ?? 0}",
+                      formatRupiah(item['harga'] ?? 0),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -488,10 +491,10 @@ class _AdminPageState extends State<AdminPage>
               );
             }).toList(),
             const Divider(),
-            _buildDetailRow("Ongkir", "Rp ${order['ongkir'] ?? 0}"),
+            _buildDetailRow("Ongkir", formatRupiah(order['ongkir'] ?? 0)),
             _buildDetailRow(
               "Pembayaran",
-              "${order['metodeBayar'] ?? order['pembayaran'] ?? '-'} (LUNAS)",
+              "${order['metodeBayar'] ?? order['pembayaran'] ?? '-'} ${order['metodeBayar'] == 'QRIS' ? '(LUNAS)' : ''}",
             ),
             _buildDetailRow("Alamat", order['alamat'] ?? "-"),
             const SizedBox(height: 10),
@@ -499,11 +502,11 @@ class _AdminPageState extends State<AdminPage>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  "Total Bayar",
+                  "Total Tagihan",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
-                  "Rp ${order['total']}",
+                  formatRupiah(order['total']),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -534,9 +537,6 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // 2. STOK TAB (DENGAN INDIKATOR WARNING STOK < 5)
-  // =========================================================
   Widget _buildStokTab() {
     return Column(
       children: [
@@ -554,7 +554,8 @@ class _AdminPageState extends State<AdminPage>
             itemBuilder: (context, index) {
               final item = stokAtkGlobal[index];
               int stok = item['stok'] ?? 0;
-              bool stokMenipis = stok < 5; // Deteksi Stok Menipis
+              bool stokMenipis = stok < 5;
+              String? urlGambar = item['gambar'];
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -568,10 +569,33 @@ class _AdminPageState extends State<AdminPage>
                   ),
                 ),
                 child: ListTile(
-                  leading: Icon(
-                    Icons.inventory_2,
-                    color: stokMenipis ? Colors.red : primaryColor,
-                  ),
+                  // =========================================================
+                  // MODIFIKASI: MENAMPILKAN FOTO DI LIST STOK ADMIN
+                  // =========================================================
+                  leading: urlGambar != null && urlGambar.isNotEmpty
+                      ? Container(
+                          width: 45,
+                          height: 45,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            color: primaryColor.withOpacity(0.05),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              urlGambar,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.inventory_2,
+                                color: stokMenipis ? Colors.red : primaryColor,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.inventory_2,
+                          color: stokMenipis ? Colors.red : primaryColor,
+                        ),
                   title: Text(
                     item['nama'],
                     style: TextStyle(
@@ -580,7 +604,7 @@ class _AdminPageState extends State<AdminPage>
                     ),
                   ),
                   subtitle: Text(
-                    "Stok : $stok | Rp ${item['harga']}",
+                    "Stok : $stok | ${formatRupiah(item['harga'])}",
                     style: TextStyle(
                       color: stokMenipis
                           ? Colors.red.shade700
@@ -617,9 +641,6 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // 3. TAB CUSTOMER (DENGAN SEARCH & DOUBLE KONFIRMASI HAPUS)
-  // =========================================================
   Widget _buildCustomerTab() {
     final List filteredCustomers = dataCustomerGlobal.where((customer) {
       String nama = (customer['nama'] ?? "").toString().toLowerCase();
@@ -660,38 +681,44 @@ class _AdminPageState extends State<AdminPage>
                         horizontal: 20,
                         vertical: 8,
                       ),
-                      child: ListTile(
-                        leading: const CircleAvatar(child: Icon(Icons.person)),
-                        title: Text(
-                          customer['nama'] ?? 'User',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          customer['nim'] ??
-                              customer['noWa'] ??
-                              'Data tidak lengkap',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_sweep,
-                            color: Colors.red,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _showCustomerDetail(customer),
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.person),
                           ),
-                          tooltip: "Nonaktifkan/Hapus Akun",
-                          onPressed: () => _tampilkanKonfirmasi(
-                            "Hapus Akun Customer?",
-                            "Apakah kamu yakin ingin menghapus permanen akun ${customer['nama']}?",
-                            () {
-                              setState(() {
-                                dataCustomerGlobal.remove(customer);
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Akun customer berhasil dihapus",
+                          title: Text(
+                            customer['nama'] ?? 'User',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            customer['nim'] ??
+                                customer['noWa'] ??
+                                'Data tidak lengkap',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.delete_sweep,
+                              color: Colors.red,
+                            ),
+                            tooltip: "Nonaktifkan/Hapus Akun",
+                            onPressed: () => _tampilkanKonfirmasi(
+                              "Hapus Akun Customer?",
+                              "Apakah kamu yakin ingin menghapus permanen akun ${customer['nama']}?",
+                              () {
+                                setState(() {
+                                  dataCustomerGlobal.remove(customer);
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      "Akun customer berhasil dihapus",
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -703,9 +730,50 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // 4. AKADEMIK TAB (UTUH)
-  // =========================================================
+  void _showCustomerDetail(Map<String, dynamic> customer) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(25),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircleAvatar(
+                radius: 40,
+                backgroundColor: Color(0xFF1B4D5C),
+                child: Icon(Icons.person, size: 50, color: Colors.white),
+              ),
+              const SizedBox(height: 15),
+              Text(
+                customer['nama'] ?? 'Tanpa Nama',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildDetailRow("NIM", customer['nim'] ?? '-'),
+              const Divider(),
+              _buildDetailRow("Email", customer['email'] ?? '-'),
+              const Divider(),
+              _buildDetailRow("No. WhatsApp", customer['noWa'] ?? '-'),
+              const Divider(),
+              _buildDetailRow(
+                "Jurusan/Prodi",
+                customer['jurusan'] ?? 'Bisnis Digital',
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildAcademicTab() {
     return Column(
       children: [
@@ -742,9 +810,6 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // DIALOG EDIT AKADEMIK (UTUH)
-  // =========================================================
   void _dialogEditAkademik(int index) {
     final isEdit = index != -1;
     final tCtrl = TextEditingController(
@@ -862,9 +927,6 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  // =========================================================
-  // DIALOG EDIT STOK (UTUH)
-  // =========================================================
   void _dialogEditStok(int index) {
     final isEdit = index != -1;
     final nCtrl = TextEditingController(
@@ -875,6 +937,12 @@ class _AdminPageState extends State<AdminPage>
     );
     final hCtrl = TextEditingController(
       text: isEdit ? stokAtkGlobal[index]['harga'].toString() : "",
+    );
+    // =========================================================
+    // PERBAIKAN: CONTROLLER UNTUK LINK GAMBAR URL
+    // =========================================================
+    final gCtrl = TextEditingController(
+      text: isEdit ? (stokAtkGlobal[index]['gambar'] ?? "") : "",
     );
 
     showDialog(
@@ -898,6 +966,14 @@ class _AdminPageState extends State<AdminPage>
               controller: hCtrl,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: "Harga (Rp)"),
+            ),
+            // Input field baru khusus menampung link URL Gambar internet
+            TextField(
+              controller: gCtrl,
+              decoration: const InputDecoration(
+                labelText: "Link Gambar (URL)",
+                hintText: "https://example.com/gambar.jpg",
+              ),
             ),
           ],
         ),
@@ -924,6 +1000,8 @@ class _AdminPageState extends State<AdminPage>
                     "nama": nCtrl.text,
                     "stok": int.tryParse(sCtrl.text) ?? 0,
                     "harga": int.tryParse(hCtrl.text) ?? 0,
+                    "gambar":
+                        gCtrl.text, // Menyimpan link foto yang diketik admin
                     "ikon": isEdit
                         ? stokAtkGlobal[index]['ikon']
                         : Icons.inventory_2,

@@ -61,6 +61,27 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // =========================================================
+  // PERBAIKAN 3: FUNGSI CEK NOTIFIKASI AKTIF (ADMIN/USER)
+  // =========================================================
+  bool _hasActiveNotification() {
+    if (isAdminGlobal) {
+      // Notifikasi Admin: Ada pesanan yang "Diproses" ATAU stok ATK ada yang < 5
+      bool pesananDiproses = daftarPesananGlobal.any(
+        (order) => order['status'] == 'Diproses',
+      );
+      bool stokMenipis = stokAtkGlobal.any((item) => (item['stok'] ?? 0) < 5);
+      return pesananDiproses || stokMenipis;
+    } else {
+      // Notifikasi User: Ada pesanan miliknya yang berstatus "Diproses" atau "Menunggu Pembayaran"
+      return daftarPesananGlobal.any(
+        (order) =>
+            order['status'] == 'Diproses' ||
+            order['status'] == 'Menunggu Pembayaran',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     String displayName = "User";
@@ -137,7 +158,8 @@ class _HomePageState extends State<HomePage> {
                                 Icons.notifications_none_rounded,
                                 color: Colors.white,
                               ),
-                              if (daftarPesananGlobal.isNotEmpty)
+                              // IMPLEMENTASI PERBAIKAN LOGIKA TITIK ORANYE
+                              if (_hasActiveNotification())
                                 const Positioned(
                                   right: 0,
                                   top: 0,
@@ -572,6 +594,9 @@ class _HomePageState extends State<HomePage> {
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
             ),
             onTap: () {
+              // Bersihkan keranjang saat logout agar user berikutnya aman
+              keranjangGlobal.clear();
+
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginPage()),

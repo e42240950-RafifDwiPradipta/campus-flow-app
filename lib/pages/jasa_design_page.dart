@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../main.dart';
+import '../main.dart'; // Akses keranjangGlobal & formatRupiah
 import 'keranjang_page.dart';
 
 class JasaDesignPage extends StatefulWidget {
@@ -44,7 +44,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
     },
   ];
 
-  // --- FUNGSI MUNCULKAN FORM REQUEST ---
   void _showFormOrder(Map<String, dynamic> paket) {
     final TextEditingController briefCtrl = TextEditingController();
     final TextEditingController waCtrl = TextEditingController();
@@ -56,7 +55,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
-          // Agar state di dalam BottomSheet bisa berubah (untuk file upload)
           builder: (BuildContext context, StateSetter setModalState) {
             return Container(
               padding: EdgeInsets.only(
@@ -73,7 +71,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Judul Paket
                   Row(
                     children: [
                       Container(
@@ -100,8 +97,9 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                                 fontSize: 16,
                               ),
                             ),
+                            // --- PERBAIKAN: Format Rupiah di Form ---
                             Text(
-                              "Rp ${paket['harga']}",
+                              formatRupiah(paket['harga']),
                               style: TextStyle(
                                 color: primaryTeal,
                                 fontWeight: FontWeight.bold,
@@ -113,8 +111,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                     ],
                   ),
                   const Divider(height: 30),
-
-                  // Input Brief
                   const Text(
                     "Deskripsi Kebutuhan",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -125,8 +121,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                     maxLines: 3,
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
-                      hintText:
-                          "Contoh: Tolong hapus background foto ini dan ganti jadi warna merah...",
+                      hintText: "Contoh: Tolong hapus background foto ini...",
                       filled: true,
                       fillColor: Colors.grey[50],
                       border: OutlineInputBorder(
@@ -136,10 +131,8 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                     ),
                   ),
                   const SizedBox(height: 15),
-
-                  // Input No WA
                   const Text(
-                    "Nomor WhatsApp (Untuk pengiriman hasil)",
+                    "Nomor WhatsApp",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
@@ -159,8 +152,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                     ),
                   ),
                   const SizedBox(height: 15),
-
-                  // Upload Referensi / Foto
                   const Text(
                     "Upload Bahan / Foto",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -182,10 +173,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Colors.grey[300]!,
-                          style: BorderStyle.solid,
-                        ),
+                        border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(12),
                         color: Colors.white,
                       ),
@@ -208,15 +196,12 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                                   ? FontWeight.bold
                                   : FontWeight.normal,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 25),
-
-                  // Tombol Masukkan Keranjang
                   ElevatedButton(
                     onPressed: () {
                       if (briefCtrl.text.isEmpty || waCtrl.text.isEmpty) {
@@ -227,8 +212,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                         );
                         return;
                       }
-
-                      // Simpan ke Keranjang Global
                       setState(() {
                         keranjangGlobal.add({
                           'jenis': 'Design',
@@ -239,16 +222,10 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                               "WA: ${waCtrl.text} | Detail: ${briefCtrl.text}",
                         });
                       });
-
-                      Navigator.pop(context); // Tutup form
-
+                      Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text(
-                            "Pesanan desain masuk keranjang!",
-                          ),
-                          backgroundColor: const Color(0xFF2D7D8E),
-                          behavior: SnackBarBehavior.floating,
+                        const SnackBar(
+                          content: Text("Pesanan desain masuk keranjang!"),
                         ),
                       );
                     },
@@ -299,11 +276,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
               padding: EdgeInsets.symmetric(horizontal: 25),
               child: Text(
                 "Pilih Layanan Desain",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 15),
@@ -339,11 +312,10 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            "Hasil akhir akan dikirimkan berupa link Google Drive melalui WhatsApp yang didaftarkan.",
+            "Hasil akhir akan dikirimkan melalui WhatsApp.",
             style: TextStyle(
               color: Colors.white.withOpacity(0.8),
               fontSize: 13,
-              height: 1.4,
             ),
           ),
         ],
@@ -365,11 +337,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10),
             ],
           ),
           child: ListTile(
@@ -395,10 +363,11 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 5),
+                // --- PERBAIKAN: Format Rupiah di List ---
                 Text(
-                  "Rp ${paket['harga']}",
-                  style: TextStyle(
-                    color: primaryTeal,
+                  formatRupiah(paket['harga']),
+                  style: const TextStyle(
+                    color: const Color(0xFF1B4D5C),
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -407,7 +376,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
             ),
             trailing: IconButton(
               icon: Icon(Icons.add_circle, color: primaryTeal, size: 35),
-              onPressed: () => _showFormOrder(paket), // Memanggil Form Order!
+              onPressed: () => _showFormOrder(paket),
             ),
           ),
         );
