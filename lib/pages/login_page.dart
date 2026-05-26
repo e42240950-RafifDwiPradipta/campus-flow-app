@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Tambahan import
 import '../main.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -22,10 +23,43 @@ class _LoginPageState extends State<LoginPage> {
   final Color primaryTeal = const Color(0xFF114B5F);
 
   // =========================
+  // INIT STATE (Load Data)
+  // =========================
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLogin();
+  }
+
+  Future<void> _loadSavedLogin() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _rememberMe = prefs.getBool('remember_me') ?? false;
+      if (_rememberMe) {
+        _emailCtrl.text = prefs.getString('saved_email') ?? '';
+        _passCtrl.text = prefs.getString('saved_password') ?? '';
+      }
+    });
+  }
+
+  // =========================
   // HANDLE LOGIN
   // =========================
-  void _handleLogin() {
+  void _handleLogin() async {
+    // Dijadikan async untuk SharedPreferences
     if (_formKey.currentState!.validate()) {
+      // Simpan preferensi Ingat Saya
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      if (_rememberMe) {
+        await prefs.setBool('remember_me', true);
+        await prefs.setString('saved_email', _emailCtrl.text);
+        await prefs.setString('saved_password', _passCtrl.text);
+      } else {
+        await prefs.remove('remember_me');
+        await prefs.remove('saved_email');
+        await prefs.remove('saved_password');
+      }
+
       setState(() {
         // =========================
         // LOGIN ADMIN
@@ -69,10 +103,12 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       // PINDAH KE HOME
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
     }
   }
 

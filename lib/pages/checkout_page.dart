@@ -689,14 +689,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
     }
 
-    // =========================================================
-    // PERBAIKAN: LOGIKA STATUS DINAMIS BERDASARKAN METODE BAYAR
-    // =========================================================
+    String generatedId =
+        "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
+    String orderDate = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
+
     Map<String, dynamic> notaBaru = {
-      'id':
-          "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
-      'noPesanan':
-          "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
+      'id': generatedId,
+      'noPesanan': generatedId,
       'items': itemsFinal,
       'subtotal': hitungSubtotal(),
       'diskon': hitungDiskon(),
@@ -707,16 +706,24 @@ class _CheckoutPageState extends State<CheckoutPage> {
       'alamat': _metodeAmbil == "Diantar (COD)"
           ? _alamatCtrl.text
           : "Ambil di Tempat",
-      'tanggal': DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now()),
-
-      // Jika pakai QRIS -> Langsung Diproses (Biru)
-      // Jika pakai Tunai -> Menunggu Pembayaran (Oranye)
-      'status': _metodeBayar == "QRIS" ? 'Diproses' : 'Menunggu Pembayaran',
+      'tanggal': orderDate,
+      'status': _metodeBayar == "QRIS"
+          ? 'Diproses'
+          : 'Diproses (pembayaran tunai)',
       'warnaStatus': _metodeBayar == "QRIS" ? Colors.blue : Colors.orange,
     };
 
     setState(() {
+      // 1. Simpan pesanan ke daftar pesanan global
       daftarPesananGlobal.insert(0, notaBaru);
+
+      // 2. Tambah data ke Notifikasi Global
+      notifikasiGlobal.insert(0, {
+        'judul': 'Pesanan Baru Masuk: $generatedId',
+        'waktu': orderDate,
+      });
+
+      // 3. Kosongkan keranjang
       keranjangGlobal.clear();
     });
 

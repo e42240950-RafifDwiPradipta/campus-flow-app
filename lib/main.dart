@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'pages/splash_screen.dart';
 import 'package:intl/intl.dart';
+import 'pages/splash_screen.dart';
+
+// --- TAMBAHAN FIREBASE ---
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 // --- GUDANG DATA GLOBAL CAMPUS FLOW ---
 
@@ -9,11 +13,15 @@ import 'package:intl/intl.dart';
 String namaUserGlobal = "";
 String nimUserGlobal = "";
 String emailUserGlobal = "";
+String noWaUserGlobal = ""; // Sudah diletakkan di posisi yang benar
+String? fotoUserGlobal;
 bool isAdminGlobal = false;
 
-// 2. Data Transaksi & Keranjang
+// 2. Data Transaksi, Keranjang & Notifikasi
 List<Map<String, dynamic>> daftarPesananGlobal = [];
 List<Map<String, dynamic>> keranjangGlobal = [];
+List<Map<String, dynamic>> notifikasiGlobal =
+    []; // Sudah dideklarasikan di sini
 
 // 3. Data Stok ATK
 List<Map<String, dynamic>> stokAtkGlobal = [
@@ -33,6 +41,7 @@ List<Map<String, String>> dataCustomerGlobal = [
     "nama": "Farhan",
     "nim": "T61003550",
     "email": "farhan@campusflow.com",
+    "noWa": "+62 81234567890",
     "prodi": "Teknik Informatika",
   },
 ];
@@ -51,7 +60,7 @@ List<Map<String, dynamic>> daftarAlamatGlobal = [
   },
 ];
 
-// 6. Kalender (UPDATE: Menggunakan markerStart & markerEnd untuk mendukung Rentang Tanggal)
+// 6. Kalender
 List<Map<String, dynamic>> dataKalenderGlobal = [
   {
     "title": "UAS Semester Genap",
@@ -72,7 +81,13 @@ String formatRupiah(num angka) {
   ).format(angka);
 }
 
-void main() {
+void main() async {
+  // Wajib ditambahkan sebelum inisialisasi Firebase
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Menyalakan mesin Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const CampusFlowApp());
 }
 

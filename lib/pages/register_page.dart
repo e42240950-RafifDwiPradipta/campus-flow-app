@@ -14,6 +14,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _namaCtrl = TextEditingController();
   final _nimCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _noWaCtrl = TextEditingController(); // Controller Baru untuk WA
   final _passCtrl = TextEditingController();
 
   bool _isPasswordHidden = true;
@@ -24,6 +25,13 @@ class _RegisterPageState extends State<RegisterPage> {
   void _handleRegister() {
     if (_formKey.currentState!.validate()) {
       setState(() {
+        // Logika merapikan nomor HP (Hapus angka 0 di depan jika ada)
+        String noWaValue = _noWaCtrl.text.trim();
+        if (noWaValue.startsWith('0')) {
+          noWaValue = noWaValue.substring(1);
+        }
+        String finalNoWa = "+62 $noWaValue";
+
         // =========================
         // DATA CUSTOMER ADMIN
         // =========================
@@ -31,6 +39,7 @@ class _RegisterPageState extends State<RegisterPage> {
           "nama": _namaCtrl.text,
           "nim": _nimCtrl.text,
           "email": _emailCtrl.text,
+          "noWa": finalNoWa, // Simpan nomor WA ke global admin
           "prodi": "Bisnis Digital",
         });
 
@@ -40,6 +49,7 @@ class _RegisterPageState extends State<RegisterPage> {
         namaUserGlobal = _namaCtrl.text;
         nimUserGlobal = _nimCtrl.text;
         emailUserGlobal = _emailCtrl.text;
+        noWaUserGlobal = finalNoWa; // Menyimpan nomor WA ke state user login
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -60,6 +70,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _namaCtrl.dispose();
     _nimCtrl.dispose();
     _emailCtrl.dispose();
+    _noWaCtrl.dispose(); // Jangan lupa di-dispose
     _passCtrl.dispose();
     super.dispose();
   }
@@ -184,6 +195,16 @@ class _RegisterPageState extends State<RegisterPage> {
 
                         const SizedBox(height: 18),
 
+                        // NO WHATSAPP
+                        _buildTextField(
+                          _noWaCtrl,
+                          "8123xxxxxxx", // Hint tanpa angka 0
+                          Icons.phone_outlined,
+                          isPhone: true,
+                        ),
+
+                        const SizedBox(height: 18),
+
                         // PASSWORD
                         _buildTextField(
                           _passCtrl,
@@ -270,18 +291,43 @@ class _RegisterPageState extends State<RegisterPage> {
     IconData icon, {
     bool isPassword = false,
     bool isEmail = false,
+    bool isPhone = false, // Parameter untuk mendeteksi nomor telepon
   }) {
     return TextFormField(
       controller: ctrl,
-
       obscureText: isPassword ? _isPasswordHidden : false,
-
-      keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
+      keyboardType: isPhone
+          ? TextInputType.phone
+          : (isEmail ? TextInputType.emailAddress : TextInputType.text),
+      style: const TextStyle(fontSize: 15),
 
       decoration: InputDecoration(
         hintText: hint,
 
-        prefixIcon: Icon(icon, color: const Color(0xFF114B5F)),
+        // MODIFIKASI PREFIX ICON BILA ITU NOMOR TELEPON
+        prefixIcon: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: const Color(0xFF114B5F)),
+              if (isPhone) ...[
+                const SizedBox(width: 8),
+                const Text(
+                  "+62",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(width: 1.5, height: 20, color: Colors.grey[300]),
+                const SizedBox(width: 2),
+              ],
+            ],
+          ),
+        ),
 
         // PASSWORD EYE
         suffixIcon: isPassword
@@ -324,6 +370,10 @@ class _RegisterPageState extends State<RegisterPage> {
 
         if (isPassword && v.length < 6) {
           return "Password minimal 6 karakter";
+        }
+
+        if (isPhone && v.length < 8) {
+          return "Nomor WhatsApp terlalu pendek";
         }
 
         return null;

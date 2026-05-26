@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
 
-class PesananPage extends StatelessWidget {
+class PesananPage extends StatefulWidget {
   const PesananPage({super.key});
 
+  @override
+  State<PesananPage> createState() => _PesananPageState();
+}
+
+class _PesananPageState extends State<PesananPage> {
   @override
   Widget build(BuildContext context) {
     const Color primaryTeal = Color(0xFF1B4D5C);
@@ -25,7 +30,6 @@ class PesananPage extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               itemCount: daftarPesananGlobal.length,
               itemBuilder: (context, index) {
-                // Balik urutan agar pesanan terbaru ada di paling atas
                 final order = daftarPesananGlobal.reversed.toList()[index];
                 return _buildOrderCard(context, order, primaryTeal);
               },
@@ -54,7 +58,6 @@ class PesananPage extends StatelessWidget {
     Map<String, dynamic> order,
     Color themeColor,
   ) {
-    // FIX ID PESANAN: Menyamakan dengan sistem terbaru
     String orderId = (order['noPesanan'] ?? order['id'] ?? "CAMPUS-000")
         .toString();
 
@@ -115,7 +118,6 @@ class PesananPage extends StatelessWidget {
                     "${(order['items'] as List).length} Produk",
                     style: const TextStyle(fontSize: 13, color: Colors.black87),
                   ),
-                  // --- PERBAIKAN: Format Rupiah di Total Card ---
                   Text(
                     formatRupiah(order['total']),
                     style: TextStyle(
@@ -152,7 +154,6 @@ class PesananPage extends StatelessWidget {
     );
   }
 
-  // Fungsi jaga-jaga untuk hitung subtotal jika data lama tidak punya key 'subtotal'
   int _hitungSubtotalManual(List items) {
     int total = 0;
     for (var item in items) {
@@ -165,9 +166,9 @@ class PesananPage extends StatelessWidget {
     List items = order['items'] ?? [];
     const Color primaryTeal = Color(0xFF1B4D5C);
 
-    // Logika status bayar
     String metodeBayar = order['metodeBayar'] ?? '-';
     String statusLunas = metodeBayar == 'QRIS' ? '(LUNAS)' : '(BAYAR NANTI)';
+    String currentStatus = order['status'] ?? '';
 
     showModalBottomSheet(
       context: context,
@@ -194,17 +195,19 @@ class PesananPage extends StatelessWidget {
                 ),
               ),
             ),
-            const Text(
-              "Detail Riwayat",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Detail Riwayat",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                _buildStatusBadge(order['status'], order['warnaStatus']),
+              ],
             ),
             const SizedBox(height: 15),
 
-            // ====================================================
-            // PENGURAIAN ITEM LENGKAP (SAMA DENGAN ADMIN)
-            // ====================================================
             ...items.map((item) {
-              // Menangkap spesifikasi (menu makanan, spec print) dan catatan
               String specs = item['spesifikasi'] ?? item['detail'] ?? '';
               String note = item['catatan'] ?? item['note'] ?? '-';
 
@@ -237,7 +240,6 @@ class PesananPage extends StatelessWidget {
                               fontSize: 14,
                             ),
                           ),
-                          // Munculkan Spesifikasi / Detail Menu Makanan
                           if (specs.isNotEmpty && specs != '-')
                             Text(
                               specs,
@@ -246,7 +248,6 @@ class PesananPage extends StatelessWidget {
                                 fontSize: 12,
                               ),
                             ),
-                          // Munculkan Note (Warna Oranye)
                           if (note.isNotEmpty && note != '-')
                             Text(
                               "Note: $note",
@@ -259,7 +260,6 @@ class PesananPage extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // --- PERBAIKAN: Format Rupiah Harga Item ---
                     Text(
                       formatRupiah(item['harga']),
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -271,10 +271,6 @@ class PesananPage extends StatelessWidget {
 
             const Divider(height: 30, thickness: 1, color: Colors.black12),
 
-            // ====================================================
-            // RINCIAN BIAYA (SAMA DENGAN NOTA SUKSES)
-            // ====================================================
-            // --- PERBAIKAN: Format Rupiah Subtotal, Ongkir, Diskon ---
             _buildDetailRow(
               "Subtotal Produk",
               formatRupiah(order['subtotal'] ?? _hitungSubtotalManual(items)),
@@ -283,13 +279,12 @@ class PesananPage extends StatelessWidget {
 
             if ((order['diskon'] ?? 0) > 0)
               _buildDetailRow(
-                "Diskon Promo Print",
+                "Diskon Promo",
                 "- ${formatRupiah(order['diskon'])}",
                 isGreen: true,
               ),
 
             const SizedBox(height: 10),
-
             _buildDetailRow("Metode Ambil", order['metodeAmbil'] ?? "-"),
             _buildDetailRow("Pembayaran", "$metodeBayar $statusLunas"),
             if (order['alamat'] != null &&
@@ -298,8 +293,6 @@ class PesananPage extends StatelessWidget {
               _buildDetailRow("Alamat", order['alamat']),
 
             const SizedBox(height: 20),
-
-            // TOTAL AKHIR
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -307,7 +300,6 @@ class PesananPage extends StatelessWidget {
                   "Total Bayar",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
-                // --- PERBAIKAN: Format Rupiah Total Bayar Akhir ---
                 Text(
                   formatRupiah(order['total']),
                   style: const TextStyle(
@@ -319,6 +311,33 @@ class PesananPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
+
+            // ====================================================
+            // TOMBOL BATAL OLEH USER
+            // ====================================================
+            if (currentStatus == 'Diproses' ||
+                currentStatus == 'Diproses (pembayaran tunai)')
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Tutup bottom sheet
+                    _konfirmasiBatalUser(order); // Tampilkan pop up yakin/tidak
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                  child: const Text(
+                    "Batalkan Pesanan",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -340,6 +359,55 @@ class PesananPage extends StatelessWidget {
                 fontWeight: isGreen ? FontWeight.bold : FontWeight.w500,
                 fontSize: 13,
                 color: isGreen ? Colors.green : Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FUNGSI POP UP KONFIRMASI BATAL ---
+  void _konfirmasiBatalUser(Map<String, dynamic> order) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Batalkan Pesanan?",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          "Apakah kamu yakin ingin membatalkan pesanan ini? Aksi ini tidak dapat dikembalikan.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Tidak", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                order['status'] = "Dibatalkan";
+                order['warnaStatus'] = Colors.red;
+              });
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    "Pesanan berhasil dibatalkan.",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              "Ya, Batalkan",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),

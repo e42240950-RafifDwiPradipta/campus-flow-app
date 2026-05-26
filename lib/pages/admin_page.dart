@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../main.dart';
@@ -79,6 +80,13 @@ class _AdminPageState extends State<AdminPage>
 
   @override
   Widget build(BuildContext context) {
+    int pesananAktif = daftarPesananGlobal.where((order) {
+      String status = order['status'] ?? '';
+      return status == 'Diproses' ||
+          status == 'Diproses (pembayaran tunai)' ||
+          status == 'Menunggu Pembayaran';
+    }).length;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       body: SafeArea(
@@ -89,11 +97,17 @@ class _AdminPageState extends State<AdminPage>
               controller: _tabController,
               labelColor: primaryColor,
               indicatorColor: primaryColor,
-              tabs: const [
-                Tab(icon: Icon(Icons.receipt_long)),
-                Tab(icon: Icon(Icons.inventory)),
-                Tab(icon: Icon(Icons.people)),
-                Tab(icon: Icon(Icons.calendar_month)),
+              tabs: [
+                Tab(
+                  icon: Badge(
+                    isLabelVisible: pesananAktif > 0,
+                    label: Text(pesananAktif.toString()),
+                    child: const Icon(Icons.receipt_long),
+                  ),
+                ),
+                const Tab(icon: Icon(Icons.inventory)),
+                const Tab(icon: Icon(Icons.people)),
+                const Tab(icon: Icon(Icons.calendar_month)),
               ],
             ),
             Expanded(
@@ -247,7 +261,7 @@ class _AdminPageState extends State<AdminPage>
                 [
                   "Semua",
                   "Diproses",
-                  "Menunggu Pembayaran",
+                  "Diproses (pembayaran tunai)",
                   "Selesai",
                   "Dibatalkan",
                 ].map((status) {
@@ -317,6 +331,7 @@ class _AdminPageState extends State<AdminPage>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (status == "Diproses" ||
+                                status == "Diproses (pembayaran tunai)" ||
                                 status == "Menunggu Pembayaran") ...[
                               IconButton(
                                 icon: const Icon(
@@ -385,6 +400,7 @@ class _AdminPageState extends State<AdminPage>
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 if (order['status'] == 'Diproses' ||
+                    order['status'] == 'Diproses (pembayaran tunai)' ||
                     order['status'] == 'Menunggu Pembayaran')
                   TextButton.icon(
                     onPressed: () {
@@ -569,9 +585,6 @@ class _AdminPageState extends State<AdminPage>
                   ),
                 ),
                 child: ListTile(
-                  // =========================================================
-                  // MODIFIKASI: MENAMPILKAN FOTO DI LIST STOK ADMIN
-                  // =========================================================
                   leading: urlGambar != null && urlGambar.isNotEmpty
                       ? Container(
                           width: 45,
@@ -676,6 +689,11 @@ class _AdminPageState extends State<AdminPage>
                   itemCount: filteredCustomers.length,
                   itemBuilder: (context, index) {
                     final customer = filteredCustomers[index];
+
+                    final bool isCurrentUser = customer['nim'] == nimUserGlobal;
+                    final bool hasFoto =
+                        isCurrentUser && fotoUserGlobal != null;
+
                     return Card(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -685,8 +703,15 @@ class _AdminPageState extends State<AdminPage>
                         borderRadius: BorderRadius.circular(10),
                         onTap: () => _showCustomerDetail(customer),
                         child: ListTile(
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.person),
+                          leading: CircleAvatar(
+                            backgroundColor: primaryColor.withOpacity(0.1),
+                            backgroundImage: hasFoto
+                                ? FileImage(File(fotoUserGlobal!))
+                                      as ImageProvider
+                                : null,
+                            child: hasFoto
+                                ? null
+                                : Icon(Icons.person, color: primaryColor),
                           ),
                           title: Text(
                             customer['nama'] ?? 'User',
@@ -731,6 +756,9 @@ class _AdminPageState extends State<AdminPage>
   }
 
   void _showCustomerDetail(Map<String, dynamic> customer) {
+    final bool isCurrentUser = customer['nim'] == nimUserGlobal;
+    final bool hasFoto = isCurrentUser && fotoUserGlobal != null;
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -742,10 +770,15 @@ class _AdminPageState extends State<AdminPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 40,
-                backgroundColor: Color(0xFF1B4D5C),
-                child: Icon(Icons.person, size: 50, color: Colors.white),
+                backgroundColor: const Color(0xFF1B4D5C),
+                backgroundImage: hasFoto
+                    ? FileImage(File(fotoUserGlobal!)) as ImageProvider
+                    : null,
+                child: hasFoto
+                    ? null
+                    : const Icon(Icons.person, size: 50, color: Colors.white),
               ),
               const SizedBox(height: 15),
               Text(
@@ -938,9 +971,6 @@ class _AdminPageState extends State<AdminPage>
     final hCtrl = TextEditingController(
       text: isEdit ? stokAtkGlobal[index]['harga'].toString() : "",
     );
-    // =========================================================
-    // PERBAIKAN: CONTROLLER UNTUK LINK GAMBAR URL
-    // =========================================================
     final gCtrl = TextEditingController(
       text: isEdit ? (stokAtkGlobal[index]['gambar'] ?? "") : "",
     );
@@ -967,7 +997,6 @@ class _AdminPageState extends State<AdminPage>
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: "Harga (Rp)"),
             ),
-            // Input field baru khusus menampung link URL Gambar internet
             TextField(
               controller: gCtrl,
               decoration: const InputDecoration(
@@ -1000,8 +1029,7 @@ class _AdminPageState extends State<AdminPage>
                     "nama": nCtrl.text,
                     "stok": int.tryParse(sCtrl.text) ?? 0,
                     "harga": int.tryParse(hCtrl.text) ?? 0,
-                    "gambar":
-                        gCtrl.text, // Menyimpan link foto yang diketik admin
+                    "gambar": gCtrl.text,
                     "ikon": isEdit
                         ? stokAtkGlobal[index]['ikon']
                         : Icons.inventory_2,

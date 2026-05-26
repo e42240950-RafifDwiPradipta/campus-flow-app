@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../main.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -15,15 +17,22 @@ class _ProfilePageState extends State<ProfilePage> {
   late TextEditingController _noHpCtrl;
 
   bool _isEditing = false;
+  bool _isPicking = false; // FLAG PENTING: Mencegah double tap
+
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-
+    // ==========================================
+    // PERBAIKAN 1: Ambil data dari Global State
+    // ==========================================
     _namaCtrl = TextEditingController(text: namaUserGlobal);
     _nimCtrl = TextEditingController(text: nimUserGlobal);
     _emailCtrl = TextEditingController(text: emailUserGlobal);
-    _noHpCtrl = TextEditingController(text: "+62 812-3456-7890");
+    _noHpCtrl = TextEditingController(
+      text: noWaUserGlobal,
+    ); // Sudah tersinkron!
   }
 
   @override
@@ -35,13 +44,38 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  // --- FUNGSI GANTI FOTO ---
+  Future<void> _gantiFoto() async {
+    if (_isPicking) return; // Kalau sedang milih foto, jangan proses klik baru
+
+    setState(() {
+      _isPicking = true;
+    });
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          fotoUserGlobal = pickedFile.path;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error ganti foto: $e");
+    } finally {
+      setState(() {
+        _isPicking = false; // Buka kunci lagi setelah selesai atau gagal
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = Color(0xFF114B5F);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FA),
-
       appBar: AppBar(
         elevation: 0,
         backgroundColor: primaryColor,
@@ -54,18 +88,26 @@ class _ProfilePageState extends State<ProfilePage> {
           IconButton(
             onPressed: () {
               setState(() {
-                _isEditing = !_isEditing;
+                // ==========================================
+                // PERBAIKAN 2: Simpan perubahan ke Global
+                // ==========================================
+                if (_isEditing) {
+                  namaUserGlobal = _namaCtrl.text;
+                  nimUserGlobal = _nimCtrl.text;
+                  emailUserGlobal = _emailCtrl.text;
+                  noWaUserGlobal = _noHpCtrl.text;
+                }
+                _isEditing = !_isEditing; // Toggle mode edit
               });
             },
             icon: Icon(_isEditing ? Icons.check_circle : Icons.edit),
           ),
         ],
       ),
-
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ===== HEADER =====
+            // ===== HEADER PROFIL =====
             Container(
               width: double.infinity,
               padding: const EdgeInsets.only(top: 30, bottom: 40),
@@ -82,42 +124,55 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               child: Column(
                 children: [
-                  // FOTO PROFIL
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 4),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
+                  GestureDetector(
+                    onTap: _isEditing ? _gantiFoto : null,
+                    child: Stack(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                          ),
+                          child: CircleAvatar(
+                            radius: 55,
+                            backgroundColor: Colors.white,
+                            backgroundImage: fotoUserGlobal != null
+                                ? FileImage(File(fotoUserGlobal!))
+                                      as ImageProvider
+                                : null,
+                            child: fotoUserGlobal == null
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 60,
+                                    color: primaryColor,
+                                  )
+                                : null,
+                          ),
                         ),
+                        if (_isEditing)
+                          const Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: CircleAvatar(
+                              backgroundColor: Colors.white,
+                              radius: 16,
+                              child: Icon(
+                                Icons.camera_alt,
+                                color: primaryColor,
+                                size: 18,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
-                    child: const CircleAvatar(
-                      radius: 55,
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        Icons.person,
-                        size: 60,
-                        color: Color(0xFF114B5F),
-                      ),
-                    ),
                   ),
-
                   const SizedBox(height: 18),
-
-                  // NAMA
                   _buildEditableHeader(
                     _namaCtrl,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
-
                   const SizedBox(height: 8),
-
-                  // NIM
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
@@ -137,32 +192,24 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
 
-            const SizedBox(height: 25),
-
             // ===== INFORMASI =====
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
                   _buildSectionTitle("Informasi Akademik"),
-
                   _buildProfileCard(
                     icon: Icons.school,
                     title: "Perguruan Tinggi",
                     value: "Politeknik Negeri Jember",
                   ),
-
                   _buildProfileCard(
                     icon: Icons.location_on,
                     title: "Kampus",
                     value: "Kampus 2 Bondowoso",
                   ),
-
                   const SizedBox(height: 20),
-
                   _buildSectionTitle("Informasi Pribadi"),
-
-                  // NIM SENDIRI
                   _buildProfileCard(
                     icon: Icons.badge,
                     title: "NIM",
@@ -170,8 +217,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     isEditable: true,
                     controller: _nimCtrl,
                   ),
-
-                  // EMAIL SENDIRI
                   _buildProfileCard(
                     icon: Icons.email,
                     title: "Email",
@@ -179,7 +224,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     isEditable: true,
                     controller: _emailCtrl,
                   ),
-
                   _buildProfileCard(
                     icon: Icons.phone,
                     title: "WhatsApp",
@@ -187,8 +231,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     isEditable: true,
                     controller: _noHpCtrl,
                   ),
-
-                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -198,7 +240,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ===== HEADER EDITABLE =====
   Widget _buildEditableHeader(
     TextEditingController controller, {
     double fontSize = 16,
@@ -216,7 +257,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 fontSize: fontSize,
                 fontWeight: fontWeight,
               ),
-              decoration: const InputDecoration(border: InputBorder.none),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+              ),
             ),
           )
         : Text(
@@ -229,7 +273,6 @@ class _ProfilePageState extends State<ProfilePage> {
           );
   }
 
-  // ===== TITLE SECTION =====
   Widget _buildSectionTitle(String title) {
     return Align(
       alignment: Alignment.centerLeft,
@@ -247,7 +290,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ===== PROFILE CARD =====
   Widget _buildProfileCard({
     required IconData icon,
     required String title,
@@ -271,7 +313,6 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       child: Row(
         children: [
-          // ICON
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -280,10 +321,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             child: Icon(icon, color: const Color(0xFF114B5F)),
           ),
-
           const SizedBox(width: 15),
-
-          // TEXT
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,15 +330,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   title,
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
-
                 const SizedBox(height: 5),
-
                 _isEditing && isEditable
                     ? TextField(
                         controller: controller,
                         decoration: const InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
                         ),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
