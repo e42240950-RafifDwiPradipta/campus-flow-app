@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../main.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart'; // Akses formatRupiah, daftarAlamatGlobal, dll
 import 'package:intl/intl.dart';
 import 'nota_sukses_page.dart';
 
@@ -19,10 +21,39 @@ class _CheckoutPageState extends State<CheckoutPage> {
   double _estimasiJarak = 0.0;
   int _biayaOngkir = 0;
 
+  // Variabel untuk menampung data keranjang dari Firebase
+  List<QueryDocumentSnapshot> _cartItems = [];
+  bool _isLoading = true;
+
   @override
   void initState() {
     super.initState();
     _alamatCtrl.addListener(_hitungOngkir);
+    _loadCartData(); // Ambil data dari Firebase saat halaman dibuka
+  }
+
+  // =========================================================
+  // FIREBASE: AMBIL DATA KERANJANG
+  // =========================================================
+  Future<void> _loadCartData() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        var snapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('cart')
+            .get();
+
+        setState(() {
+          _cartItems = snapshot.docs;
+          _isLoading = false;
+        });
+      } catch (e) {
+        setState(() => _isLoading = false);
+        debugPrint("Gagal load cart di checkout: $e");
+      }
+    }
   }
 
   @override
@@ -57,21 +88,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
       int extraKm = (_estimasiJarak - 5.0).ceil();
       _biayaOngkir = baseOngkir + (extraKm * 1000);
     }
-
     setState(() {});
   }
 
   int hitungSubtotal() {
     int subtotal = 0;
-    for (var item in keranjangGlobal) {
-      subtotal += (item['harga'] as int);
+    for (var doc in _cartItems) {
+      var item = doc.data() as Map<String, dynamic>;
+      subtotal += (item['harga'] as int? ?? 0);
     }
     return subtotal;
   }
 
   int hitungDiskon() {
     int totalDiskon = 0;
-    for (var item in keranjangGlobal) {
+    for (var doc in _cartItems) {
+      var item = doc.data() as Map<String, dynamic>;
       if (item['jenis'] == 'Print' && item.containsKey('jumlahHalaman')) {
         int hal = item['jumlahHalaman'] as int;
         if (hal >= 50) {
@@ -156,6 +188,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("Konfirmasi Checkout"),
+          backgroundColor: primaryTeal,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFB),
       appBar: AppBar(
@@ -222,8 +264,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildRincianPesanan() {
+    if (_cartItems.isEmpty)
+      return const Text(
+        "Keranjang Kosong",
+        style: TextStyle(color: Colors.grey),
+      );
+
     return Column(
-      children: keranjangGlobal.map((item) {
+      children: _cartItems.map((doc) {
+        var item = doc.data() as Map<String, dynamic>;
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(
@@ -234,7 +283,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item['nama'],
+                      item['nama'] ?? '-',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
@@ -248,7 +297,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
               ),
               Text(
-                formatRupiah(item['harga']),
+                formatRupiah(item['harga'] ?? 0),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -492,6 +541,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
+                if (_cartItems.isEmpty) return; // Cegah checkout kosong
+
                 if (_metodeAmbil == "Diantar (COD)" &&
                     _alamatCtrl.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -611,6 +662,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  // =========================================================
+  // FIREBASE: PROSES SIMPAN ORDER & HAPUS CART
+  // =========================================================
   void _jalankanLoadingDanSimpan() {
     showDialog(
       context: context,
@@ -643,95 +697,92 @@ class _CheckoutPageState extends State<CheckoutPage> {
       },
     );
 
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pop(context);
-      _prosesSimpanData();
-    });
+    _prosesSimpanDataFirebase();
   }
 
-  void _prosesSimpanData() {
-    List<Map<String, dynamic>> itemsFinal = keranjangGlobal.map((item) {
-      int qty = 1;
-      if (item['jumlah'] != null) {
-        qty = item['jumlah'] is int
-            ? item['jumlah']
-            : int.tryParse(item['jumlah'].toString()) ?? 1;
-      } else if (item['detail'] != null &&
-          item['detail'].toString().contains('pcs')) {
-        final match = RegExp(
-          r'\((\d+)\s*pcs\)',
-        ).firstMatch(item['detail'].toString());
-        if (match != null) {
-          qty = int.tryParse(match.group(1) ?? '1') ?? 1;
-        }
-      }
-
-      return {
-        'nama': item['nama'],
-        'harga': item['harga'],
-        'jumlah': qty,
-        'spesifikasi': item['spesifikasi'] ?? item['detail'] ?? '-',
-        'catatan': item['catatan'] ?? item['note'] ?? '-',
-        'file': item['file'],
-        'referensi': item['referensi'] ?? item['foto'],
-      };
-    }).toList();
-
-    for (var itemFinal in itemsFinal) {
-      for (var stokItem in stokAtkGlobal) {
-        if (stokItem['nama'] == itemFinal['nama']) {
-          int stokAwal = stokItem['stok'] as int;
-          int stokDipotong = itemFinal['jumlah'] as int;
-
-          stokItem['stok'] = stokAwal - stokDipotong;
-          if ((stokItem['stok'] as int) < 0) stokItem['stok'] = 0;
-        }
-      }
+  Future<void> _prosesSimpanDataFirebase() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) Navigator.pop(context); // Tutup loading
+      return;
     }
 
-    String generatedId =
-        "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
-    String orderDate = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
+    try {
+      String generatedId =
+          "CAMPUS-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
+      String orderDate = DateFormat(
+        'dd MMM yyyy, HH:mm',
+      ).format(DateTime.now());
 
-    Map<String, dynamic> notaBaru = {
-      'id': generatedId,
-      'noPesanan': generatedId,
-      'items': itemsFinal,
-      'subtotal': hitungSubtotal(),
-      'diskon': hitungDiskon(),
-      'ongkir': _biayaOngkir,
-      'total': hitungTotal(),
-      'metodeAmbil': _metodeAmbil,
-      'metodeBayar': _metodeBayar,
-      'alamat': _metodeAmbil == "Diantar (COD)"
-          ? _alamatCtrl.text
-          : "Ambil di Tempat",
-      'tanggal': orderDate,
-      'status': _metodeBayar == "QRIS"
-          ? 'Diproses'
-          : 'Diproses (pembayaran tunai)',
-      'warnaStatus': _metodeBayar == "QRIS" ? Colors.blue : Colors.orange,
-    };
+      // 1. Ekstrak data dari _cartItems (Snapshot Firebase)
+      List<Map<String, dynamic>> itemsFinal = _cartItems.map((doc) {
+        var item = doc.data() as Map<String, dynamic>;
+        return {
+          'nama': item['nama'] ?? '-',
+          'harga': item['harga'] ?? 0,
+          'jumlah': item['jumlah'] ?? 1,
+          'spesifikasi': item['spesifikasi'] ?? item['detail'] ?? '-',
+          'catatan': item['catatan'] ?? '-',
+          'file': item['file'],
+          'jenis': item['jenis'],
+        };
+      }).toList();
 
-    setState(() {
-      // 1. Simpan pesanan ke daftar pesanan global
-      daftarPesananGlobal.insert(0, notaBaru);
+      // Struktur Data Order untuk disimpan ke Firebase
+      Map<String, dynamic> orderData = {
+        'id': generatedId,
+        'uid': user.uid,
+        'email': emailUserGlobal,
+        'namaPemesan': namaUserGlobal,
+        'items': itemsFinal,
+        'subtotal': hitungSubtotal(),
+        'diskon': hitungDiskon(),
+        'ongkir': _biayaOngkir,
+        'total': hitungTotal(),
+        'metodeAmbil': _metodeAmbil,
+        'metodeBayar': _metodeBayar,
+        'alamat': _metodeAmbil == "Diantar (COD)"
+            ? _alamatCtrl.text
+            : "Ambil di Tempat",
+        'tanggal': orderDate,
+        'status': 'Diproses', // Default Status untuk admin
+        'timestamp': FieldValue.serverTimestamp(),
+      };
 
-      // 2. Tambah data ke Notifikasi Global
-      notifikasiGlobal.insert(0, {
-        'judul': 'Pesanan Baru Masuk: $generatedId',
-        'waktu': orderDate,
-      });
+      // 2. Simpan ke koleksi 'orders' (Utama)
+      await FirebaseFirestore.instance
+          .collection('orders')
+          .doc(generatedId)
+          .set(orderData);
 
-      // 3. Kosongkan keranjang
-      keranjangGlobal.clear();
-    });
+      // 3. Hapus semua data di sub-koleksi 'cart' user ini (Batch Delete)
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      for (var doc in _cartItems) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NotaSuksesPage(dataNota: notaBaru),
-      ),
-    );
+      if (mounted) Navigator.pop(context); // Tutup Loading
+
+      // 4. Navigasi ke Halaman Sukses
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NotaSuksesPage(dataNota: orderData),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Tutup Loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Gagal memproses pesanan: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

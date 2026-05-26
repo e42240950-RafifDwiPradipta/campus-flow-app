@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Tambahan import
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import '../main.dart';
 import 'home_page.dart';
 import 'register_page.dart';
@@ -43,12 +45,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // =========================
-  // HANDLE LOGIN
+  // HANDLE LOGIN (FIREBASE)
   // =========================
   void _handleLogin() async {
-    // Dijadikan async untuk SharedPreferences
     if (_formKey.currentState!.validate()) {
-      // Simpan preferensi Ingat Saya
+      // Simpan preferensi Ingat Saya (Lokal)
       SharedPreferences prefs = await SharedPreferences.getInstance();
       if (_rememberMe) {
         await prefs.setBool('remember_me', true);
@@ -60,60 +61,121 @@ class _LoginPageState extends State<LoginPage> {
         await prefs.remove('saved_password');
       }
 
-      setState(() {
+      // Tampilkan Loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF114B5F)),
+        ),
+      );
+
+      try {
         // =========================
-        // LOGIN ADMIN
+        // 1. LOGIN ADMIN (Jalur Cepat)
         // =========================
         if (_emailCtrl.text == "admin@satset.com" &&
             _passCtrl.text == "admin123") {
           isAdminGlobal = true;
-
           namaUserGlobal = "Admin Campus";
           nimUserGlobal = "ADMIN001";
           emailUserGlobal = "admin@satset.com";
-        } else {
-          // =========================
-          // LOGIN USER
-          // =========================
-          isAdminGlobal = false;
 
-          bool userFound = false;
-
-          // Cari user berdasarkan email
-          for (var user in dataCustomerGlobal) {
-            if (user["email"] == _emailCtrl.text) {
-              namaUserGlobal = user["nama"] ?? "";
-              nimUserGlobal = user["nim"] ?? "";
-              emailUserGlobal = user["email"] ?? "";
-
-              userFound = true;
-              break;
-            }
+          if (mounted) Navigator.pop(context); // Tutup Loading
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomePage()),
+            );
           }
+          return; // Hentikan fungsi di sini khusus Admin
+        }
 
-          // =========================
-          // JIKA EMAIL TIDAK TERDAFTAR
-          // =========================
-          if (!userFound) {
+        // =========================
+        // 2. LOGIN USER (Lewat Firebase)
+        // =========================
+        isAdminGlobal = false;
+
+        // Cek ke server Firebase
+        UserCredential userCredential = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(
+              email: _emailCtrl.text.trim(),
+              password: _passCtrl.text.trim(),
+            );
+
+        // Ambil biodata user dari Firestore
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
+
+        if (userDoc.exists) {
+          Map<String, dynamic> userData =
+              userDoc.data() as Map<String, dynamic>;
+          setState(() {
+            namaUserGlobal = userData['nama'] ?? "";
+            nimUserGlobal = userData['nim'] ?? "";
+            emailUserGlobal = userData['email'] ?? _emailCtrl.text;
+            noWaUserGlobal = userData['noWa'] ?? "";
+          });
+        } else {
+          // Jika data di Firestore tidak ditemukan
+          setState(() {
             namaUserGlobal = _emailCtrl.text.split('@')[0];
             nimUserGlobal = "Belum terdaftar";
             emailUserGlobal = _emailCtrl.text;
-          }
+          });
         }
-      });
 
-      // PINDAH KE HOME
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
+        if (mounted) Navigator.pop(context); // Tutup Loading
+
+        // Berhasil, pindah ke Home
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomePage()),
+          );
+        }
+      } on FirebaseAuthException catch (e) {
+        if (mounted) Navigator.pop(context); // Tutup Loading
+
+        String errorMsg = "Terjadi kesalahan saat login.";
+        if (e.code == 'user-not-found' ||
+            e.code == 'invalid-credential' ||
+            e.code == 'wrong-password') {
+          errorMsg = "Email atau password salah.";
+        } else if (e.code == 'invalid-email') {
+          errorMsg = "Format email tidak valid.";
+        } else if (e.code == 'too-many-requests') {
+          errorMsg = "Terlalu banyak percobaan. Coba lagi nanti.";
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) Navigator.pop(context); // Tutup Loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Gagal mengambil data dari server."),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
 
   // =========================
-  // BOTTOM SHEET RESET PASSWORD
+  // BOTTOM SHEET RESET PASSWORD (FIREBASE)
   // =========================
   void _showForgotPasswordSheet() {
     final resetEmailCtrl = TextEditingController(text: _emailCtrl.text);
@@ -121,11 +183,9 @@ class _LoginPageState extends State<LoginPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
-
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -133,11 +193,9 @@ class _LoginPageState extends State<LoginPage> {
           left: 25,
           right: 25,
         ),
-
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
-
           children: [
             Text(
               "Reset Password",
@@ -147,80 +205,84 @@ class _LoginPageState extends State<LoginPage> {
                 color: primaryTeal,
               ),
             ),
-
             const SizedBox(height: 12),
-
             const Text(
               "Masukkan email yang terdaftar untuk menerima tautan reset password.",
               style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.5),
             ),
-
             const SizedBox(height: 25),
-
             TextField(
               controller: resetEmailCtrl,
               keyboardType: TextInputType.emailAddress,
-
               decoration: InputDecoration(
                 hintText: "Email terdaftar",
-
                 prefixIcon: Icon(Icons.email_outlined, color: primaryTeal),
-
                 filled: true,
                 fillColor: const Color(0xFFF7F9FC),
-
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(18),
                   borderSide: BorderSide.none,
                 ),
-
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(18),
                   borderSide: BorderSide(color: primaryTeal, width: 1.5),
                 ),
               ),
             ),
-
             const SizedBox(height: 30),
-
             SizedBox(
               width: double.infinity,
               height: 55,
-
               child: ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   if (resetEmailCtrl.text.isNotEmpty) {
-                    Navigator.pop(context);
+                    try {
+                      // Fungsi Mengirim Email Reset dari Firebase
+                      await FirebaseAuth.instance.sendPasswordResetEmail(
+                        email: resetEmailCtrl.text.trim(),
+                      );
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "Tautan reset dikirim ke ${resetEmailCtrl.text}",
-                        ),
-                        backgroundColor: primaryTeal,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                      if (mounted) Navigator.pop(context);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "Tautan reset berhasil dikirim ke ${resetEmailCtrl.text}! Silakan cek inbox/spam email Anda.",
+                            ),
+                            backgroundColor: primaryTeal,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "Gagal mengirim email reset. Pastikan email terdaftar.",
+                            ),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
                   }
                 },
-
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryTeal,
                   foregroundColor: Colors.white,
                   elevation: 0,
-
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
                   ),
                 ),
-
                 child: const Text(
                   "KIRIM TAUTAN",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-
             const SizedBox(height: 25),
           ],
         ),
@@ -239,32 +301,24 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 28),
-
             child: Form(
               key: _formKey,
-
               child: Column(
                 children: [
                   const SizedBox(height: 20),
 
-                  // =========================
                   // LOGO
-                  // =========================
                   Container(
                     padding: const EdgeInsets.all(25),
-
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFF114B5F), Color(0xFF1A759F)],
                       ),
-
                       shape: BoxShape.circle,
-
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.1),
@@ -273,19 +327,15 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
                     ),
-
                     child: const Icon(
                       Icons.auto_awesome_motion,
                       size: 65,
                       color: Colors.white,
                     ),
                   ),
-
                   const SizedBox(height: 25),
 
-                  // =========================
                   // TITLE
-                  // =========================
                   Text(
                     "CAMPUS FLOW",
                     style: TextStyle(
@@ -295,26 +345,19 @@ class _LoginPageState extends State<LoginPage> {
                       letterSpacing: 1.5,
                     ),
                   ),
-
                   const SizedBox(height: 8),
-
                   const Text(
                     "Easy way for your campus life",
                     style: TextStyle(color: Colors.grey, fontSize: 14),
                   ),
-
                   const SizedBox(height: 45),
 
-                  // =========================
                   // LOGIN CARD
-                  // =========================
                   Container(
                     padding: const EdgeInsets.all(25),
-
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(30),
-
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.04),
@@ -323,34 +366,27 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
                     ),
-
                     child: Column(
                       children: [
                         // EMAIL
                         TextFormField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
-
                           decoration: InputDecoration(
                             hintText: "Email",
-
                             prefixIcon: Icon(
                               Icons.email_outlined,
                               color: primaryTeal,
                             ),
-
                             filled: true,
                             fillColor: const Color(0xFFF7F9FC),
-
                             contentPadding: const EdgeInsets.symmetric(
                               vertical: 18,
                             ),
-
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide.none,
                             ),
-
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
@@ -359,61 +395,44 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                           ),
-
                           validator: (v) {
-                            if (v == null || v.isEmpty) {
+                            if (v == null || v.isEmpty)
                               return "Email wajib diisi";
-                            }
-
-                            if (!v.contains("@")) {
+                            if (!v.contains("@"))
                               return "Format email tidak valid";
-                            }
-
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 18),
 
                         // PASSWORD
                         TextFormField(
                           controller: _passCtrl,
                           obscureText: _obscureText,
-
                           decoration: InputDecoration(
                             hintText: "Password",
-
                             prefixIcon: Icon(
                               Icons.lock_outline,
                               color: primaryTeal,
                             ),
-
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscureText
                                     ? Icons.visibility_off_outlined
                                     : Icons.visibility_outlined,
                               ),
-
-                              onPressed: () {
-                                setState(() {
-                                  _obscureText = !_obscureText;
-                                });
-                              },
+                              onPressed: () =>
+                                  setState(() => _obscureText = !_obscureText),
                             ),
-
                             filled: true,
                             fillColor: const Color(0xFFF7F9FC),
-
                             contentPadding: const EdgeInsets.symmetric(
                               vertical: 18,
                             ),
-
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide.none,
                             ),
-
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
@@ -422,51 +441,36 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                           ),
-
                           validator: (v) {
-                            if (v == null || v.isEmpty) {
+                            if (v == null || v.isEmpty)
                               return "Password wajib diisi";
-                            }
-
-                            if (v.length < 6) {
+                            if (v.length < 6)
                               return "Password minimal 6 karakter";
-                            }
-
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 10),
 
                         // REMEMBER + FORGOT
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
                           children: [
                             Row(
                               children: [
                                 SizedBox(
                                   width: 24,
                                   height: 24,
-
                                   child: Checkbox(
                                     value: _rememberMe,
                                     activeColor: primaryTeal,
-
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(5),
                                     ),
-
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _rememberMe = value!;
-                                      });
-                                    },
+                                    onChanged: (value) =>
+                                        setState(() => _rememberMe = value!),
                                   ),
                                 ),
-
                                 const SizedBox(width: 8),
-
                                 const Text(
                                   "Ingat Saya",
                                   style: TextStyle(
@@ -476,10 +480,8 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               ],
                             ),
-
                             TextButton(
                               onPressed: _showForgotPasswordSheet,
-
                               child: Text(
                                 "Lupa Password?",
                                 style: TextStyle(
@@ -491,27 +493,22 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 30),
 
                         // BUTTON LOGIN
                         SizedBox(
                           width: double.infinity,
                           height: 55,
-
                           child: ElevatedButton(
                             onPressed: _handleLogin,
-
                             style: ElevatedButton.styleFrom(
                               backgroundColor: primaryTeal,
                               foregroundColor: Colors.white,
                               elevation: 0,
-
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(18),
                               ),
                             ),
-
                             child: const Text(
                               "Masuk",
                               style: TextStyle(
@@ -524,29 +521,23 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 30),
 
                   // REGISTER
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-
                     children: [
                       const Text(
                         "Belum punya akun? ",
                         style: TextStyle(color: Colors.grey),
                       ),
-
                       GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegisterPage(),
-                            ),
-                          );
-                        },
-
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RegisterPage(),
+                          ),
+                        ),
                         child: Text(
                           "Daftar di sini",
                           style: TextStyle(
@@ -557,7 +548,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 25),
                 ],
               ),

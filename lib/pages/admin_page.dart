@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../main.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../main.dart'; // Akses data lokal yang masih tersisa
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -31,10 +32,12 @@ class _AdminPageState extends State<AdminPage>
     super.dispose();
   }
 
-  int _hitungTotalPendapatan() {
-    return daftarPesananGlobal
-        .where((order) => order['status'] == 'Selesai')
-        .fold(0, (sum, item) => sum + (item['total'] as int? ?? 0));
+  // Fungsi pembantu warna status (Biar tidak bergantung pada data statis)
+  Color _getColorForStatus(String status) {
+    if (status.contains('Selesai')) return Colors.green;
+    if (status.contains('Dibatalkan')) return Colors.red;
+    if (status.contains('Menunggu Pembayaran')) return Colors.orange;
+    return primaryColor; // Default untuk "Diproses"
   }
 
   void _tampilkanKonfirmasi(
@@ -80,54 +83,92 @@ class _AdminPageState extends State<AdminPage>
 
   @override
   Widget build(BuildContext context) {
-    int pesananAktif = daftarPesananGlobal.where((order) {
-      String status = order['status'] ?? '';
-      return status == 'Diproses' ||
-          status == 'Diproses (pembayaran tunai)' ||
-          status == 'Menunggu Pembayaran';
-    }).length;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            TabBar(
-              controller: _tabController,
-              labelColor: primaryColor,
-              indicatorColor: primaryColor,
-              tabs: [
-                Tab(
-                  icon: Badge(
-                    isLabelVisible: pesananAktif > 0,
-                    label: Text(pesananAktif.toString()),
-                    child: const Icon(Icons.receipt_long),
+      // =========================================================
+      // FIREBASE: STREAM BUILDER UNTUK SELURUH ADMIN DASHBOARD
+      // =========================================================
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('orders').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          List<QueryDocumentSnapshot> allOrders = snapshot.hasData
+              ? snapshot.data!.docs
+              : [];
+
+          // Urutkan pesanan dari yang terbaru
+          allOrders.sort((a, b) {
+            Timestamp? tA =
+                (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            Timestamp? tB =
+                (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            if (tA == null || tB == null) return 0;
+            return tB.compareTo(tA);
+          });
+
+          // Kalkulasi Data Live
+          int pesananAktif = 0;
+          int totalPendapatan = 0;
+
+          for (var doc in allOrders) {
+            var order = doc.data() as Map<String, dynamic>;
+            String status = order['status'] ?? '';
+
+            if (status.contains('Diproses') ||
+                status == 'Menunggu Pembayaran') {
+              pesananAktif++;
+            }
+            if (status == 'Selesai') {
+              totalPendapatan += (order['total'] as int? ?? 0);
+            }
+          }
+
+          return SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(allOrders.length, totalPendapatan),
+                TabBar(
+                  controller: _tabController,
+                  labelColor: primaryColor,
+                  indicatorColor: primaryColor,
+                  tabs: [
+                    Tab(
+                      icon: Badge(
+                        isLabelVisible: pesananAktif > 0,
+                        label: Text(pesananAktif.toString()),
+                        child: const Icon(Icons.receipt_long),
+                      ),
+                    ),
+                    const Tab(icon: Icon(Icons.inventory)),
+                    const Tab(icon: Icon(Icons.people)),
+                    const Tab(icon: Icon(Icons.calendar_month)),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildPesananTab(
+                        allOrders,
+                      ), // Pass data Firebase ke Tab Pesanan
+                      _buildStokTab(), // (Masih lokal)
+                      _buildCustomerTab(), // (Masih lokal)
+                      _buildAcademicTab(), // (Masih lokal)
+                    ],
                   ),
                 ),
-                const Tab(icon: Icon(Icons.inventory)),
-                const Tab(icon: Icon(Icons.people)),
-                const Tab(icon: Icon(Icons.calendar_month)),
               ],
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPesananTab(),
-                  _buildStokTab(),
-                  _buildCustomerTab(),
-                  _buildAcademicTab(),
-                ],
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(int totalPesanan, int totalPendapatan) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
@@ -163,14 +204,10 @@ class _AdminPageState extends State<AdminPage>
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildStatCard(
-                  Icons.shopping_cart,
-                  "${daftarPesananGlobal.length}",
-                  "Pesanan",
-                ),
+                _buildStatCard(Icons.shopping_cart, "$totalPesanan", "Pesanan"),
                 _buildStatCard(
                   Icons.monetization_on,
-                  formatRupiah(_hitungTotalPendapatan()),
+                  formatRupiah(totalPendapatan),
                   "Pendapatan",
                 ),
                 _buildStatCard(
@@ -223,12 +260,15 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  Widget _buildPesananTab() {
-    final List filteredOrders = daftarPesananGlobal.where((order) {
-      String id = (order['id'] ?? order['noPesanan'] ?? "")
-          .toString()
-          .toLowerCase();
+  // =========================================================
+  // FIREBASE: TAB PESANAN (MENGGUNAKAN DATA LIVE)
+  // =========================================================
+  Widget _buildPesananTab(List<QueryDocumentSnapshot> allOrders) {
+    final List<QueryDocumentSnapshot> filteredOrders = allOrders.where((doc) {
+      var order = doc.data() as Map<String, dynamic>;
+      String id = (order['id'] ?? "").toString().toLowerCase();
       String status = order['status'] ?? "Diproses";
+
       bool matchesSearch = id.contains(_searchPesanan.toLowerCase());
       bool matchesFilter =
           _filterPesanan == "Semua" || status == _filterPesanan;
@@ -297,12 +337,13 @@ class _AdminPageState extends State<AdminPage>
                   padding: const EdgeInsets.all(20),
                   itemCount: filteredOrders.length,
                   itemBuilder: (context, index) {
-                    final order = filteredOrders[index];
-                    String orderId =
-                        (order['id'] ?? order['noPesanan'] ?? "CAMPUS-000")
-                            .toString();
+                    final doc = filteredOrders[index];
+                    final order = doc.data() as Map<String, dynamic>;
+                    String docId = doc.id; // ID Dokumen Firebase
+
+                    String orderId = (order['id'] ?? "CAMPUS-000").toString();
                     String status = order['status'] ?? "Diproses";
-                    Color statusColor = order['warnaStatus'] ?? Colors.orange;
+                    Color statusColor = _getColorForStatus(status);
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -310,7 +351,10 @@ class _AdminPageState extends State<AdminPage>
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: ListTile(
-                        onTap: () => _showOrderDetail(order, index),
+                        onTap: () => _showOrderDetail(
+                          order,
+                          docId,
+                        ), // Bawa docId buat update
                         leading: CircleAvatar(
                           backgroundColor: statusColor,
                           child: Icon(
@@ -325,14 +369,14 @@ class _AdminPageState extends State<AdminPage>
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          "$status - ${formatRupiah(order['total'])}",
+                          "$status - ${formatRupiah(order['total'] ?? 0)}",
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (status == "Diproses" ||
-                                status == "Diproses (pembayaran tunai)" ||
+                            if (status.contains("Diproses") ||
                                 status == "Menunggu Pembayaran") ...[
+                              // TOMBOL BATAL (ADMIN)
                               IconButton(
                                 icon: const Icon(
                                   Icons.cancel_outlined,
@@ -341,12 +385,15 @@ class _AdminPageState extends State<AdminPage>
                                 onPressed: () => _tampilkanKonfirmasi(
                                   "Batalkan Pesanan?",
                                   "Yakin ingin membatalkan pesanan $orderId?",
-                                  () => setState(() {
-                                    order['status'] = "Dibatalkan";
-                                    order['warnaStatus'] = Colors.red;
-                                  }),
+                                  () async {
+                                    await FirebaseFirestore.instance
+                                        .collection('orders')
+                                        .doc(docId)
+                                        .update({'status': 'Dibatalkan'});
+                                  },
                                 ),
                               ),
+                              // TOMBOL SELESAI (ADMIN)
                               IconButton(
                                 icon: const Icon(
                                   Icons.check_circle_outline,
@@ -355,10 +402,12 @@ class _AdminPageState extends State<AdminPage>
                                 onPressed: () => _tampilkanKonfirmasi(
                                   "Selesaikan Pesanan?",
                                   "Pastikan barang sudah diterima/dibayar oleh pelanggan.",
-                                  () => setState(() {
-                                    order['status'] = "Selesai";
-                                    order['warnaStatus'] = Colors.green;
-                                  }),
+                                  () async {
+                                    await FirebaseFirestore.instance
+                                        .collection('orders')
+                                        .doc(docId)
+                                        .update({'status': 'Selesai'});
+                                  },
                                 ),
                               ),
                             ] else
@@ -379,7 +428,7 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  void _showOrderDetail(Map<String, dynamic> order, int index) {
+  void _showOrderDetail(Map<String, dynamic> order, String docId) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -399,8 +448,7 @@ class _AdminPageState extends State<AdminPage>
                   "Detail Pesanan",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                if (order['status'] == 'Diproses' ||
-                    order['status'] == 'Diproses (pembayaran tunai)' ||
+                if (order['status'].toString().contains('Diproses') ||
                     order['status'] == 'Menunggu Pembayaran')
                   TextButton.icon(
                     onPressed: () {
@@ -408,10 +456,12 @@ class _AdminPageState extends State<AdminPage>
                       _tampilkanKonfirmasi(
                         "Batalkan Pesanan?",
                         "Membatalkan pesanan dari dalam menu detail.",
-                        () => setState(() {
-                          order['status'] = "Dibatalkan";
-                          order['warnaStatus'] = Colors.red;
-                        }),
+                        () async {
+                          await FirebaseFirestore.instance
+                              .collection('orders')
+                              .doc(docId)
+                              .update({'status': 'Dibatalkan'});
+                        },
                       );
                     },
                     icon: const Icon(Icons.cancel, color: Colors.red, size: 16),
@@ -423,7 +473,39 @@ class _AdminPageState extends State<AdminPage>
               ],
             ),
             const Divider(),
-            ...(order['items'] as List).map((item) {
+
+            // Info Pemesan
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Pemesan:",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    order['namaPemesan'] ?? 'Tanpa Nama',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    order['email'] ?? '-',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 15),
+
+            ...(order['items'] as List? ?? []).map((item) {
               String namaLowerCase = (item['nama'] ?? '')
                   .toString()
                   .toLowerCase();
@@ -470,34 +552,18 @@ class _AdminPageState extends State<AdminPage>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (isDesign)
+                    if (isDesign || isPrint)
                       IconButton(
-                        icon: const Icon(
-                          Icons.image,
-                          color: Colors.blue,
+                        icon: Icon(
+                          isPrint ? Icons.picture_as_pdf : Icons.image,
+                          color: isPrint ? Colors.red : Colors.blue,
                           size: 20,
                         ),
-                        tooltip: "Unduh Foto/Referensi",
+                        tooltip: "Unduh File",
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("Mengunduh Foto/Referensi..."),
-                            ),
-                          );
-                        },
-                      ),
-                    if (isPrint)
-                      IconButton(
-                        icon: const Icon(
-                          Icons.picture_as_pdf,
-                          color: Colors.red,
-                          size: 20,
-                        ),
-                        tooltip: "Unduh Dokumen PDF",
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Mengunduh Dokumen PDF..."),
+                              content: Text("Fitur unduh file menyusul..."),
                             ),
                           );
                         },
@@ -510,7 +576,7 @@ class _AdminPageState extends State<AdminPage>
             _buildDetailRow("Ongkir", formatRupiah(order['ongkir'] ?? 0)),
             _buildDetailRow(
               "Pembayaran",
-              "${order['metodeBayar'] ?? order['pembayaran'] ?? '-'} ${order['metodeBayar'] == 'QRIS' ? '(LUNAS)' : ''}",
+              "${order['metodeBayar'] ?? '-'} ${order['metodeBayar'] == 'QRIS' ? '(LUNAS)' : ''}",
             ),
             _buildDetailRow("Alamat", order['alamat'] ?? "-"),
             const SizedBox(height: 10),
@@ -522,7 +588,7 @@ class _AdminPageState extends State<AdminPage>
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
-                  formatRupiah(order['total']),
+                  formatRupiah(order['total'] ?? 0),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -552,6 +618,10 @@ class _AdminPageState extends State<AdminPage>
       ),
     );
   }
+
+  // =========================================================
+  // TAB STOK, CUSTOMER, AKADEMIK (TETAP LOKAL SEMENTARA)
+  // =========================================================
 
   Widget _buildStokTab() {
     return Column(
@@ -689,7 +759,6 @@ class _AdminPageState extends State<AdminPage>
                   itemCount: filteredCustomers.length,
                   itemBuilder: (context, index) {
                     final customer = filteredCustomers[index];
-
                     final bool isCurrentUser = customer['nim'] == nimUserGlobal;
                     final bool hasFoto =
                         isCurrentUser && fotoUserGlobal != null;
@@ -732,9 +801,9 @@ class _AdminPageState extends State<AdminPage>
                               "Hapus Akun Customer?",
                               "Apakah kamu yakin ingin menghapus permanen akun ${customer['nama']}?",
                               () {
-                                setState(() {
-                                  dataCustomerGlobal.remove(customer);
-                                });
+                                setState(
+                                  () => dataCustomerGlobal.remove(customer),
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(

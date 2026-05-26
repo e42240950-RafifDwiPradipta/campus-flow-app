@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../main.dart'; // Akses keranjangGlobal & formatRupiah
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart'; // Akses formatRupiah
 import 'keranjang_page.dart';
 
 class JastipMakananPage extends StatefulWidget {
@@ -25,35 +27,84 @@ class _JastipMakananPageState extends State<JastipMakananPage> {
     "Fotokopian Koperasi",
   ];
 
-  void _tambahKeKeranjang() {
+  // =========================================================
+  // FIREBASE: FUNGSI TAMBAH PESANAN JASTIP KE KERANJANG
+  // =========================================================
+  Future<void> _tambahKeKeranjangFirebase() async {
     if (_formKey.currentState!.validate()) {
-      int hargaBarang =
-          int.tryParse(_hargaCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      User? user = FirebaseAuth.instance.currentUser;
 
-      int biayaJastip = 2000;
+      // Cek login
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Silakan login terlebih dahulu!"),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-      setState(() {
-        keranjangGlobal.add({
-          'jenis': 'Jastip',
-          'nama': "Titip: ${_tempatCtrl.text}",
-          'harga': hargaBarang + biayaJastip,
-          'detail': "${_menuCtrl.text} (+ Jastip ${formatRupiah(biayaJastip)})",
-          'catatan': _catatanCtrl.text.isEmpty ? '-' : _catatanCtrl.text,
-        });
-      });
-
-      _tempatCtrl.clear();
-      _menuCtrl.clear();
-      _hargaCtrl.clear();
-      _catatanCtrl.clear();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Pesanan Jastip berhasil masuk keranjang!"),
-          backgroundColor: Color(0xFF2D7D8E),
-          behavior: SnackBarBehavior.floating,
+      // Tampilkan Loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF2D7D8E)),
         ),
       );
+
+      try {
+        int hargaBarang =
+            int.tryParse(_hargaCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+            0;
+        int biayaJastip = 2000;
+
+        // Tembak ke Firestore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('cart')
+            .add({
+              'jenis': 'Jastip',
+              'nama': "Titip: ${_tempatCtrl.text}",
+              'harga': hargaBarang + biayaJastip,
+              'detail':
+                  "${_menuCtrl.text} (+ Jastip ${formatRupiah(biayaJastip)})",
+              'catatan': _catatanCtrl.text.isEmpty ? '-' : _catatanCtrl.text,
+              'jumlah': 1, // Asumsi 1 order jastip
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+
+        if (mounted) Navigator.pop(context); // Tutup Loading
+
+        // Bersihkan Form
+        _tempatCtrl.clear();
+        _menuCtrl.clear();
+        _hargaCtrl.clear();
+        _catatanCtrl.clear();
+
+        // Notifikasi Sukses
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Pesanan Jastip berhasil masuk keranjang! 🛵"),
+              backgroundColor: Color(0xFF2D7D8E),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) Navigator.pop(context); // Tutup Loading
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Gagal menambah pesanan: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -137,7 +188,7 @@ class _JastipMakananPageState extends State<JastipMakananPage> {
                       icon: Icons.payments_outlined,
                       keyboardType: TextInputType.number,
                       validatorMsg: "Masukkan harga",
-                      isPrice: true, // AKTIFKAN RP
+                      isPrice: true,
                     ),
                     const SizedBox(height: 20),
                     _buildSectionTitle("4. Catatan Tambahan"),
@@ -149,7 +200,8 @@ class _JastipMakananPageState extends State<JastipMakananPage> {
                     ),
                     const SizedBox(height: 30),
                     ElevatedButton(
-                      onPressed: _tambahKeKeranjang,
+                      onPressed:
+                          _tambahKeKeranjangFirebase, // Panggil Fungsi Firebase
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryTeal,
                         foregroundColor: Colors.white,
@@ -212,7 +264,7 @@ class _JastipMakananPageState extends State<JastipMakananPage> {
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     String? validatorMsg,
-    bool isPrice = false, // Tambahkan parameter ini
+    bool isPrice = false,
   }) {
     return TextFormField(
       controller: controller,
@@ -220,7 +272,6 @@ class _JastipMakananPageState extends State<JastipMakananPage> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hint,
-        // Ini kuncinya:
         prefixText: isPrice ? 'Rp ' : null,
         prefixStyle: const TextStyle(
           fontWeight: FontWeight.bold,
@@ -240,17 +291,65 @@ class _JastipMakananPageState extends State<JastipMakananPage> {
     );
   }
 
+  // =========================================================
+  // FIREBASE: BADGE KERANJANG REAL-TIME
+  // =========================================================
   Widget _buildCartBadge() {
-    return IconButton(
-      icon: Badge(
-        label: Text("${keranjangGlobal.length}"),
-        isLabelVisible: keranjangGlobal.isNotEmpty,
-        child: const Icon(Icons.shopping_bag_outlined),
-      ),
-      onPressed: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const KeranjangPage()),
-      ).then((_) => setState(() {})),
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return IconButton(
+        icon: const Icon(Icons.shopping_bag_outlined),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const KeranjangPage()),
+        ),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .snapshots(),
+      builder: (context, snapshot) {
+        int cartCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+        return Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_bag_outlined),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const KeranjangPage(),
+                  ),
+                ),
+              ),
+              if (cartCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 10,
+                  child: CircleAvatar(
+                    radius: 8,
+                    backgroundColor: Colors.red,
+                    child: Text(
+                      "$cartCount",
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

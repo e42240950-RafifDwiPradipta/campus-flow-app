@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../main.dart'; // Akses keranjangGlobal & formatRupiah
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart'; // Akses formatRupiah
 import 'keranjang_page.dart';
 
 class JasaDesignPage extends StatefulWidget {
@@ -43,6 +45,75 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
       "warna": const Color(0xFFE8F5E9),
     },
   ];
+
+  // =========================================================
+  // FIREBASE: FUNGSI TAMBAH PESANAN DESAIN KE KERANJANG
+  // =========================================================
+  Future<void> _submitOrderToFirebase(
+    Map<String, dynamic> paket,
+    String brief,
+    String wa,
+    String? namaFile,
+  ) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Silakan login terlebih dahulu!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Tampilkan Loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1B4D5C)),
+      ),
+    );
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .add({
+            'jenis': 'Design',
+            'nama': paket['nama'],
+            'harga': paket['harga'],
+            'detail': "File: ${namaFile ?? 'Tidak ada'}",
+            'catatan': "WA: $wa | Detail: $brief",
+            'jumlah': 1, // Fix 1 karena jasa design dihitung per paket layanan
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+
+      if (mounted) Navigator.pop(context); // Tutup Loading
+      if (mounted) Navigator.pop(context); // Tutup Bottom Sheet Form
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Pesanan desain masuk keranjang!"),
+            backgroundColor: Color(0xFF1B4D5C),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Tutup Loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Gagal menambah pesanan: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   void _showFormOrder(Map<String, dynamic> paket) {
     final TextEditingController briefCtrl = TextEditingController();
@@ -97,7 +168,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                                 fontSize: 16,
                               ),
                             ),
-                            // --- PERBAIKAN: Format Rupiah di Form ---
                             Text(
                               formatRupiah(paket['harga']),
                               style: TextStyle(
@@ -212,21 +282,13 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                         );
                         return;
                       }
-                      setState(() {
-                        keranjangGlobal.add({
-                          'jenis': 'Design',
-                          'nama': paket['nama'],
-                          'harga': paket['harga'],
-                          'detail': "File: ${namaFileLampiran ?? 'Tidak ada'}",
-                          'catatan':
-                              "WA: ${waCtrl.text} | Detail: ${briefCtrl.text}",
-                        });
-                      });
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Pesanan desain masuk keranjang!"),
-                        ),
+
+                      // Panggil fungsi Firebase
+                      _submitOrderToFirebase(
+                        paket,
+                        briefCtrl.text,
+                        waCtrl.text,
+                        namaFileLampiran,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -363,11 +425,10 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 5),
-                // --- PERBAIKAN: Format Rupiah di List ---
                 Text(
                   formatRupiah(paket['harga']),
                   style: const TextStyle(
-                    color: const Color(0xFF1B4D5C),
+                    color: Color(0xFF1B4D5C),
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -384,38 +445,65 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
     );
   }
 
+  // =========================================================
+  // FIREBASE: BADGE KERANJANG REAL-TIME
+  // =========================================================
   Widget _buildCartBadge() {
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.shopping_bag_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const KeranjangPage()),
-            ).then((_) => setState(() {})),
-          ),
-          if (keranjangGlobal.isNotEmpty)
-            Positioned(
-              right: 8,
-              top: 10,
-              child: CircleAvatar(
-                radius: 8,
-                backgroundColor: Colors.red,
-                child: Text(
-                  "${keranjangGlobal.length}",
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return IconButton(
+        icon: const Icon(Icons.shopping_bag_outlined),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const KeranjangPage()),
+        ),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .snapshots(),
+      builder: (context, snapshot) {
+        int cartCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+        return Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_bag_outlined),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const KeranjangPage(),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
+              if (cartCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 10,
+                  child: CircleAvatar(
+                    radius: 8,
+                    backgroundColor: Colors.red,
+                    child: Text(
+                      "$cartCount",
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../main.dart';
 import 'keranjang_page.dart';
 
@@ -13,36 +15,87 @@ class _AtkPageState extends State<AtkPage> {
   final Color primaryTeal = const Color(0xFF1B4D5C);
   final Map<String, int> _jumlahBeli = {};
 
-  // Inisialisasi jumlah beli berdasarkan isi keranjang saat ini agar sinkron
   @override
   void initState() {
     super.initState();
-    for (var item in keranjangGlobal) {
-      if (item['jenis'] == 'ATK') {
-        // Ekstrak angka dari string "Produk ATK (X pcs)"
-        RegExp regExp = RegExp(r'\((.*?) ');
-        var match = regExp.firstMatch(item['detail'] ?? "");
-        if (match != null) {
-          _jumlahBeli[item['nama']] = int.tryParse(match.group(1)!) ?? 0;
+    _syncCartFromFirebase(); // Panggil fungsi sinkronisasi saat halaman dibuka
+  }
+
+  // =========================================================
+  // FIREBASE: AMBIL DATA KERANJANG SAAT INI (Biar Counter Sinkron)
+  // =========================================================
+  Future<void> _syncCartFromFirebase() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .where('jenis', isEqualTo: 'ATK')
+          .get();
+
+      setState(() {
+        _jumlahBeli.clear();
+        for (var doc in snapshot.docs) {
+          var data = doc.data();
+          // Simpan jumlah beli ke memori lokal untuk tampilan UI
+          _jumlahBeli[data['nama']] = data['jumlah'] ?? 0;
         }
-      }
+      });
+    } catch (e) {
+      debugPrint("Gagal load keranjang: $e");
     }
   }
 
-  void updateKeranjang(Map<String, dynamic> item) {
-    final qty = _jumlahBeli[item['nama']] ?? 0;
+  // =========================================================
+  // FIREBASE: UPDATE / HAPUS BARANG SAAT TOMBOL +/- DIKLIK
+  // =========================================================
+  Future<void> _updateCartToFirebase(Map<String, dynamic> item, int qty) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Silakan login terlebih dahulu!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-    setState(() {
-      keranjangGlobal.removeWhere((e) => e['nama'] == item['nama']);
-      if (qty > 0) {
-        keranjangGlobal.add({
+    // Jadikan nama barang sebagai ID Dokumen (Hapus karakter aneh biar aman)
+    String docId = item['nama'].toString().replaceAll(RegExp(r'[/\\?]'), '-');
+    var docRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('cart')
+        .doc(docId);
+
+    try {
+      if (qty <= 0) {
+        // Kalau 0, hapus dari database
+        await docRef.delete();
+      } else {
+        // Kalau lebih dari 0, simpan/update ke database
+        await docRef.set({
           'jenis': 'ATK',
           'nama': item['nama'],
-          'harga': item['harga'] * qty,
+          'harga': item['harga'] * qty, // Harga subtotal
+          'harga_satuan': item['harga'],
           'detail': 'Produk ATK ($qty pcs)',
+          'jumlah': qty,
+          'timestamp': FieldValue.serverTimestamp(),
         });
       }
-    });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Gagal update keranjang: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -61,7 +114,7 @@ class _AtkPageState extends State<AtkPage> {
       ),
       body: Column(
         children: [
-          // Banner Promo Kecil ala Shopee
+          // Banner Promo Kecil
           _buildPromoBanner(),
 
           Expanded(
@@ -131,9 +184,6 @@ class _AtkPageState extends State<AtkPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // =========================================================
-          // MODIFIKASI UTAMA: MENAMPILKAN FOTO PRODUK SUNGUHAN
-          // =========================================================
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -146,7 +196,6 @@ class _AtkPageState extends State<AtkPage> {
               alignment: Alignment.center,
               child: Hero(
                 tag: nama,
-                // Logika: Cek apakah ada link gambar internet
                 child: urlGambar != null && urlGambar.isNotEmpty
                     ? ClipRRect(
                         borderRadius: const BorderRadius.vertical(
@@ -157,14 +206,11 @@ class _AtkPageState extends State<AtkPage> {
                           width: double.infinity,
                           height: double.infinity,
                           fit: BoxFit.cover,
-                          // Trik Pengaman: Kalau link mati atau internet off, otomatis tampilin Icon
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(
-                              item['ikon'] ?? Icons.inventory_2,
-                              size: 60,
-                              color: primaryTeal,
-                            );
-                          },
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            item['ikon'] ?? Icons.inventory_2,
+                            size: 60,
+                            color: primaryTeal,
+                          ),
                         ),
                       )
                     : Icon(
@@ -175,8 +221,6 @@ class _AtkPageState extends State<AtkPage> {
               ),
             ),
           ),
-
-          // Detail Produk
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -207,7 +251,7 @@ class _AtkPageState extends State<AtkPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Tombol Beli / Counter (UI Shopee Style)
+                // Cek UI berdasarkan jumlah
                 qty > 0
                     ? _buildCounter(item, nama, qty)
                     : _buildBuyButton(item, nama),
@@ -225,8 +269,9 @@ class _AtkPageState extends State<AtkPage> {
       children: [
         _circleBtn(Icons.remove, () {
           setState(() {
-            _jumlahBeli[nama] = qty - 1;
-            updateKeranjang(item);
+            int newQty = qty - 1;
+            _jumlahBeli[nama] = newQty;
+            _updateCartToFirebase(item, newQty); // Tembak ke server
           });
         }),
         Text(
@@ -236,8 +281,9 @@ class _AtkPageState extends State<AtkPage> {
         _circleBtn(Icons.add, () {
           if (qty < item['stok']) {
             setState(() {
-              _jumlahBeli[nama] = qty + 1;
-              updateKeranjang(item);
+              int newQty = qty + 1;
+              _jumlahBeli[nama] = newQty;
+              _updateCartToFirebase(item, newQty); // Tembak ke server
             });
           }
         }),
@@ -268,7 +314,7 @@ class _AtkPageState extends State<AtkPage> {
           if (item['stok'] > 0) {
             setState(() {
               _jumlahBeli[nama] = 1;
-              updateKeranjang(item);
+              _updateCartToFirebase(item, 1); // Tembak ke server
             });
           }
         },
@@ -289,14 +335,21 @@ class _AtkPageState extends State<AtkPage> {
   }
 
   Widget? _buildFAB() {
-    if (keranjangGlobal.isEmpty) return null;
+    // Hitung ada berapa jenis barang yang dibeli
+    int cartCount = _jumlahBeli.values.where((qty) => qty > 0).length;
+
+    if (cartCount == 0) return null;
     return FloatingActionButton.extended(
       backgroundColor: const Color(0xFF2D7D8E),
-      onPressed: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const KeranjangPage()),
-      ).then((_) => setState(() {})),
-      label: Text("${keranjangGlobal.length} Item di Keranjang"),
+      onPressed: () =>
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const KeranjangPage()),
+          ).then((_) {
+            // Refresh sinkronisasi keranjang ketika kembali dari halaman keranjang
+            _syncCartFromFirebase();
+          }),
+      label: Text("$cartCount Item di Keranjang"),
       icon: const Icon(Icons.shopping_bag, color: Colors.white),
     );
   }

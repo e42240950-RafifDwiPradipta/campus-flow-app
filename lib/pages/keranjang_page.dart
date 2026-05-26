@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../main.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart'; // Tetap biarkan untuk formatRupiah atau data statis lainnya jika ada
 import 'checkout_page.dart';
 
 class KeranjangPage extends StatefulWidget {
@@ -12,16 +14,90 @@ class KeranjangPage extends StatefulWidget {
 class _KeranjangPageState extends State<KeranjangPage> {
   final Color primaryTeal = const Color(0xFF1B4D5C);
 
-  int hitungSubtotal() {
+  // Ambil referensi user yang sedang login
+  User? user = FirebaseAuth.instance.currentUser;
+
+  // Fungsi untuk menghitung total langsung dari daftar dokumen Firestore
+  int _hitungSubtotal(List<QueryDocumentSnapshot> docs) {
     int total = 0;
-    for (var item in keranjangGlobal) {
-      total += (item['harga'] as int);
+    for (var doc in docs) {
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+      total += (data['harga'] as int? ?? 0);
     }
     return total;
   }
 
+  // Fungsi menghapus satu item dari Firestore
+  Future<void> _hapusItemKeranjang(String docId) async {
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .collection('cart')
+            .doc(docId)
+            .delete();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Item dihapus dari keranjang"),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Gagal menghapus: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // Fungsi mengosongkan keranjang dari Firestore
+  Future<void> _kosongkanKeranjang(List<QueryDocumentSnapshot> docs) async {
+    if (user != null) {
+      try {
+        // Karena Firestore tidak punya fitur 'delete collection', kita harus looping
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+        for (var doc in docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+
+        if (mounted) Navigator.pop(context); // Tutup dialog
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Gagal mengosongkan keranjang: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Jika belum login, jangan coba akses Firestore
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("Keranjang Belanja"),
+          backgroundColor: primaryTeal,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(child: Text("Silakan login terlebih dahulu.")),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFB),
       appBar: AppBar(
@@ -32,39 +108,62 @@ class _KeranjangPageState extends State<KeranjangPage> {
         backgroundColor: primaryTeal,
         foregroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          if (keranjangGlobal.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined),
-              onPressed: () {
-                _showConfirmDeleteAll();
-              },
-            ),
-        ],
+        // Tombol delete all akan dirender di dalam StreamBuilder jika ada datanya
       ),
-      body: keranjangGlobal.isEmpty
-          ? _buildEmptyState()
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: keranjangGlobal.length,
-                    itemBuilder: (context, index) {
-                      final item = keranjangGlobal[index];
-                      return _buildCartItem(item, index);
-                    },
-                  ),
-                ),
-                _buildCheckoutSection(),
-              ],
-            ),
+      // MENGGUNAKAN STREAM BUILDER UNTUK DATA REAL-TIME
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .collection('cart')
+            .orderBy(
+              'timestamp',
+              descending: true,
+            ) // Urutkan dari yang terbaru dimasukkan
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text("Terjadi kesalahan: ${snapshot.error}"));
+          }
+
+          final cartDocs = snapshot.data?.docs ?? [];
+
+          // Tampilkan AppBar Actions (Hapus Semua) HANYA jika keranjang ada isinya
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Opsional: Cara aman update UI di luar build cycle jika perlu
+          });
+
+          return Column(
+            children: [
+              // AREA DAFTAR BARANG
+              Expanded(
+                child: cartDocs.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(20),
+                        itemCount: cartDocs.length,
+                        itemBuilder: (context, index) {
+                          var doc = cartDocs[index];
+                          Map<String, dynamic> itemData =
+                              doc.data() as Map<String, dynamic>;
+                          return _buildCartItem(doc.id, itemData);
+                        },
+                      ),
+              ),
+
+              // AREA CHECKOUT BUTTON (Hanya muncul jika ada barang)
+              if (cartDocs.isNotEmpty) _buildCheckoutSection(cartDocs),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  // =========================================================
-  // PERBAIKAN 2: TAMPILAN KERANJANG KOSONG (EMPTY STATE)
-  // =========================================================
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -79,8 +178,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons
-                    .remove_shopping_cart_rounded, // Ikon keranjang sedih/kosong
+                Icons.remove_shopping_cart_rounded,
                 size: 100,
                 color: Colors.red[300],
               ),
@@ -103,8 +201,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
             ),
             const SizedBox(height: 40),
             ElevatedButton.icon(
-              onPressed: () =>
-                  Navigator.pop(context), // Melempar kembali ke Beranda
+              onPressed: () => Navigator.pop(context),
               icon: const Icon(
                 Icons.shopping_bag_outlined,
                 color: Colors.white,
@@ -134,7 +231,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
     );
   }
 
-  Widget _buildCartItem(Map<String, dynamic> item, int index) {
+  Widget _buildCartItem(String docId, Map<String, dynamic> item) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       decoration: BoxDecoration(
@@ -162,7 +259,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
           child: Icon(_getIcon(item['jenis']), color: primaryTeal),
         ),
         title: Text(
-          item['nama'],
+          item['nama'] ?? "Item",
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
         ),
         subtitle: Column(
@@ -174,11 +271,8 @@ class _KeranjangPageState extends State<KeranjangPage> {
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
             const SizedBox(height: 4),
-            // =========================================================
-            // PERBAIKAN 1: FORMAT RUPIAH PADA ITEM KERANJANG
-            // =========================================================
             Text(
-              formatRupiah(item['harga']),
+              formatRupiah(item['harga'] ?? 0),
               style: TextStyle(
                 color: primaryTeal,
                 fontWeight: FontWeight.bold,
@@ -189,23 +283,16 @@ class _KeranjangPageState extends State<KeranjangPage> {
         ),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-          onPressed: () {
-            setState(() {
-              keranjangGlobal.removeAt(index);
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Item dihapus"),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          },
+          onPressed: () =>
+              _hapusItemKeranjang(docId), // Panggil fungsi hapus ke Firebase
         ),
       ),
     );
   }
 
-  Widget _buildCheckoutSection() {
+  Widget _buildCheckoutSection(List<QueryDocumentSnapshot> docs) {
+    int totalHarga = _hitungSubtotal(docs);
+
     return Container(
       padding: const EdgeInsets.all(25),
       decoration: const BoxDecoration(
@@ -226,6 +313,25 @@ class _KeranjangPageState extends State<KeranjangPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Baris Tombol Hapus Semua (Dipindah ke bawah sini karena AppBar ribet baca state StreamBuilder)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _showConfirmDeleteAll(docs),
+                  icon: const Icon(
+                    Icons.delete_sweep,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    "Kosongkan Keranjang",
+                    style: TextStyle(color: Colors.redAccent, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -237,11 +343,8 @@ class _KeranjangPageState extends State<KeranjangPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                // =========================================================
-                // PERBAIKAN 1: FORMAT RUPIAH PADA TOTAL PEMBAYARAN
-                // =========================================================
                 Text(
-                  formatRupiah(hitungSubtotal()),
+                  formatRupiah(totalHarga),
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -253,14 +356,11 @@ class _KeranjangPageState extends State<KeranjangPage> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                if (keranjangGlobal.isNotEmpty) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CheckoutPage(),
-                    ),
-                  );
-                }
+                // Navigasi ke Checkout (Nanti halaman checkout juga harus pakai data Firebase ini)
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CheckoutPage()),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryTeal,
@@ -299,7 +399,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
     }
   }
 
-  void _showConfirmDeleteAll() {
+  void _showConfirmDeleteAll(List<QueryDocumentSnapshot> docs) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -313,10 +413,7 @@ class _KeranjangPageState extends State<KeranjangPage> {
             child: const Text("Batal"),
           ),
           TextButton(
-            onPressed: () {
-              setState(() => keranjangGlobal.clear());
-              Navigator.pop(context);
-            },
+            onPressed: () => _kosongkanKeranjang(docs),
             child: const Text(
               "Hapus Semua",
               style: TextStyle(color: Colors.red),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../main.dart'; // Akses keranjangGlobal & formatRupiah
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart'; // Akses formatRupiah
 import 'keranjang_page.dart';
 
 class PrintFeaturePage extends StatefulWidget {
@@ -46,13 +48,11 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
     });
   }
 
-  // Logika update halaman dari tombol + dan -
   void _updateHalaman(int val) {
     if (val < 1) val = 1;
     setState(() {
       _jumlahHalaman = val;
       _halamanController.text = val.toString();
-      // Pindahkan kursor ke ujung teks
       _halamanController.selection = TextSelection.fromPosition(
         TextPosition(offset: _halamanController.text.length),
       );
@@ -60,7 +60,6 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
     _hitungHarga();
   }
 
-  // Fungsi untuk mengembalikan form ke kondisi awal
   void _resetForm() {
     setState(() {
       _namaFile = null;
@@ -82,6 +81,87 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
     if (result != null) {
       setState(() => _namaFile = result.files.first.name);
       _hitungHarga();
+    }
+  }
+
+  // =========================================================
+  // FIREBASE: FUNGSI TAMBAH PESANAN PRINT KE KERANJANG
+  // =========================================================
+  Future<void> _tambahKeKeranjangFirebase() async {
+    if (_namaFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Mohon upload file terlebih dahulu!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Silakan login terlebih dahulu!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Tampilkan Loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1B4D5C)),
+      ),
+    );
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .add({
+            'jenis': 'Print',
+            'nama': 'Print: $_namaFile',
+            'harga': _estimasiTotal,
+            'detail':
+                '$_ukuranKertas, $_jumlahHalaman Hal, $_warna${_pakaiJilid ? ", Jilid" : ""}',
+            'catatan': _catatanController.text.isEmpty
+                ? '-'
+                : _catatanController.text,
+            'jumlahHalaman': _jumlahHalaman,
+            'file': _namaFile,
+            'jumlah': 1, // Pesanan print dihitung 1 paket file ini
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+
+      if (mounted) Navigator.pop(context); // Tutup Loading
+
+      // Reset form ke awal
+      _resetForm();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Dokumen berhasil masuk keranjang! 🖨️"),
+            backgroundColor: Color(0xFF2D7D8E),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Tutup Loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Gagal menambah pesanan: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -146,44 +226,74 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
     );
   }
 
+  // =========================================================
+  // FIREBASE: BADGE KERANJANG REAL-TIME
+  // =========================================================
   Widget _buildCartBadge() {
-    return Padding(
-      padding: const EdgeInsets.only(right: 10),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.shopping_bag_outlined, size: 28),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const KeranjangPage()),
-            ).then((_) => setState(() {})),
-          ),
-          if (keranjangGlobal.isNotEmpty)
-            Positioned(
-              right: 8,
-              top: 10,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                ),
-                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                child: Text(
-                  "${keranjangGlobal.length}",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return IconButton(
+        icon: const Icon(Icons.shopping_bag_outlined, size: 28),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const KeranjangPage()),
+        ),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .snapshots(),
+      builder: (context, snapshot) {
+        int cartCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+        return Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_bag_outlined, size: 28),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const KeranjangPage(),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
+              if (cartCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      "$cartCount",
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -341,10 +451,10 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
                     }
                   },
                   onEditingComplete: () {
-                    FocusScope.of(context).unfocus(); // Tutup keyboard
+                    FocusScope.of(context).unfocus();
                     if (int.tryParse(_halamanController.text) == null ||
                         int.parse(_halamanController.text) < 1) {
-                      _updateHalaman(1); // Balik ke 1 kalau ngawur
+                      _updateHalaman(1);
                     }
                   },
                 ),
@@ -430,7 +540,6 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
                 "Estimasi Total",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              // --- PERUBAHAN: Format Rupiah Estimasi Print ---
               Text(
                 formatRupiah(_estimasiTotal),
                 style: TextStyle(
@@ -459,41 +568,7 @@ class _PrintFeaturePageState extends State<PrintFeaturePage> {
 
   Widget _buildAddToCartButton() {
     return ElevatedButton(
-      onPressed: () {
-        if (_namaFile == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Mohon upload file terlebih dahulu!"),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
-
-        setState(() {
-          keranjangGlobal.add({
-            'jenis': 'Print',
-            'nama': 'Print: $_namaFile',
-            'harga': _estimasiTotal,
-            'detail':
-                '$_ukuranKertas, $_jumlahHalaman Hal, $_warna${_pakaiJilid ? ", Jilid" : ""}',
-            'catatan': _catatanController.text,
-            'jumlahHalaman': _jumlahHalaman,
-            'file': _namaFile, // Simpan nama file agar bisa dipanggil Admin
-          });
-        });
-
-        // Panggil fungsi reset form
-        _resetForm();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Berhasil masuk keranjang!"),
-            backgroundColor: Color(0xFF2D7D8E),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      },
+      onPressed: _tambahKeKeranjangFirebase, // Panggil fungsi Firebase
       style: ElevatedButton.styleFrom(
         backgroundColor: primaryTeal,
         foregroundColor: Colors.white,
