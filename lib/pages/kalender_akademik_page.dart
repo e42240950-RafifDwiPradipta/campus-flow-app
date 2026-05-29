@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart';
 
 class KalenderAkademikPage extends StatefulWidget {
@@ -14,9 +15,12 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
-  // FUNGSI UNTUK MEWARNAI BLOK KALENDER (TETAP SAMA)
-  List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
-    return dataKalenderGlobal.where((event) {
+  // Modifikasi fungsi agar menerima data dari Firebase
+  List<Map<String, dynamic>> _getEventsForDay(
+    DateTime day,
+    List<Map<String, dynamic>> dataKalender,
+  ) {
+    return dataKalender.where((event) {
       if (event['markerStart'] == null || event['markerEnd'] == null) {
         return false;
       }
@@ -35,154 +39,181 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
 
   @override
   Widget build(BuildContext context) {
-    // =========================================================
-    // LOGIKA BARU: FILTER EVENT RENTANG PANJANG & PENDEK
-    // =========================================================
-    final eventsThisMonth = dataKalenderGlobal.where((event) {
-      if (event['markerStart'] == null || event['markerEnd'] == null) {
-        return false;
-      }
-
-      DateTime start = event['markerStart'] as DateTime;
-      DateTime end = event['markerEnd'] as DateTime;
-
-      // Ubah tahun dan bulan menjadi satu angka absolut
-      // Ini paling akurat untuk mendeteksi bulan di tengah-tengah rentang
-      int startMonthValue = start.year * 12 + start.month;
-      int endMonthValue = end.year * 12 + end.month;
-      int focusMonthValue = _focusedDay.year * 12 + _focusedDay.month;
-
-      // Event akan muncul jika bulan yang sedang dilihat (focusMonth)
-      // lebih besar/sama dengan bulan mulai, DAN lebih kecil/sama dengan bulan selesai
-      return focusMonthValue >= startMonthValue &&
-          focusMonthValue <= endMonthValue;
-    }).toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF114B5F),
+        foregroundColor: Colors.white,
         title: const Text(
           "Kalender Akademik",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      body: Column(
-        children: [
-          Container(
-            color: Colors.white,
-            child: TableCalendar<Map<String, dynamic>>(
-              firstDay: DateTime(2020),
-              lastDay: DateTime(2035),
-              focusedDay: _focusedDay,
-              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+      // =========================================================
+      // FIREBASE: STREAM BUILDER UNTUK MENGAMBIL JADWAL
+      // =========================================================
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('kalender_akademik')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF114B5F)),
+            );
+          }
 
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                });
-              },
+          if (snapshot.hasError) {
+            return Center(
+              child: Text("Gagal memuat kalender: ${snapshot.error}"),
+            );
+          }
 
-              // Update _focusedDay saat bulan digeser (swipe)
-              onPageChanged: (focusedDay) {
-                setState(() {
-                  _focusedDay = focusedDay;
-                });
-              },
+          // Format data Firebase (Timestamp -> DateTime & Int -> Color)
+          List<Map<String, dynamic>> kalenderData = [];
+          if (snapshot.hasData) {
+            kalenderData = snapshot.data!.docs.map((doc) {
+              var data = doc.data() as Map<String, dynamic>;
+              return {
+                'title': data['title'] ?? 'Kegiatan',
+                'date': data['date'] ?? '-',
+                'color': Color(data['color'] ?? Colors.orange.value),
+                'markerStart': (data['markerStart'] as Timestamp?)?.toDate(),
+                'markerEnd': (data['markerEnd'] as Timestamp?)?.toDate(),
+              };
+            }).toList();
+          }
 
-              calendarFormat: _calendarFormat,
-              onFormatChanged: (format) =>
-                  setState(() => _calendarFormat = format),
+          // Logika Filter Event Rentang Panjang & Pendek untuk Bulan Fokus
+          final eventsThisMonth = kalenderData.where((event) {
+            if (event['markerStart'] == null || event['markerEnd'] == null) {
+              return false;
+            }
 
-              calendarBuilders: CalendarBuilders(
-                defaultBuilder: (context, day, focusedDay) {
-                  final events = _getEventsForDay(day);
-                  if (events.isNotEmpty) {
-                    Color eventColor = events[0]['color'] ?? Colors.orange;
-                    return Container(
-                      margin: const EdgeInsets.all(6.0),
-                      decoration: BoxDecoration(
-                        color: eventColor.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${day.day}',
-                        style: TextStyle(
-                          color: eventColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    );
-                  }
-                  return null;
-                },
-              ),
-            ),
-          ),
-          const Divider(height: 1),
+            DateTime start = event['markerStart'] as DateTime;
+            DateTime end = event['markerEnd'] as DateTime;
 
-          // =========================================================
-          // LIST EVENT YANG SUDAH DI-FILTER
-          // =========================================================
-          Expanded(
-            child: eventsThisMonth.isEmpty
-                ? const Center(
-                    child: Text(
-                      "Tidak ada jadwal di bulan ini.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: eventsThisMonth.length,
-                    itemBuilder: (context, index) {
-                      final event = eventsThisMonth[index];
-                      Color color = event['color'] ?? Colors.orange;
+            int startMonthValue = start.year * 12 + start.month;
+            int endMonthValue = end.year * 12 + end.month;
+            int focusMonthValue = _focusedDay.year * 12 + _focusedDay.month;
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border(
-                            left: BorderSide(color: color, width: 5),
+            return focusMonthValue >= startMonthValue &&
+                focusMonthValue <= endMonthValue;
+          }).toList();
+
+          return Column(
+            children: [
+              Container(
+                color: Colors.white,
+                child: TableCalendar<Map<String, dynamic>>(
+                  firstDay: DateTime(2020),
+                  lastDay: DateTime(2035),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  onDaySelected: (selectedDay, focusedDay) {
+                    setState(() {
+                      _selectedDay = selectedDay;
+                      _focusedDay = focusedDay;
+                    });
+                  },
+                  onPageChanged: (focusedDay) {
+                    setState(() {
+                      _focusedDay = focusedDay;
+                    });
+                  },
+                  calendarFormat: _calendarFormat,
+                  onFormatChanged: (format) =>
+                      setState(() => _calendarFormat = format),
+                  calendarBuilders: CalendarBuilders(
+                    defaultBuilder: (context, day, focusedDay) {
+                      final events = _getEventsForDay(day, kalenderData);
+                      if (events.isNotEmpty) {
+                        Color eventColor = events[0]['color'] ?? Colors.orange;
+                        return Container(
+                          margin: const EdgeInsets.all(6.0),
+                          decoration: BoxDecoration(
+                            color: eventColor.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
-                              blurRadius: 10,
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${day.day}',
+                            style: TextStyle(
+                              color: eventColor,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              event['title'] ?? '',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              event['date'] ?? '',
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
+                          ),
+                        );
+                      }
+                      return null;
                     },
                   ),
-          ),
-        ],
+                ),
+              ),
+              const Divider(height: 1),
+
+              // =========================================================
+              // LIST EVENT YANG SUDAH DI-FILTER
+              // =========================================================
+              Expanded(
+                child: eventsThisMonth.isEmpty
+                    ? const Center(
+                        child: Text(
+                          "Tidak ada jadwal di bulan ini.",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: eventsThisMonth.length,
+                        itemBuilder: (context, index) {
+                          final event = eventsThisMonth[index];
+                          Color color = event['color'] ?? Colors.orange;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border(
+                                left: BorderSide(color: color, width: 5),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  event['title'] ?? '',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  event['date'] ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

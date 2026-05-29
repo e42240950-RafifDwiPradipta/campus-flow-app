@@ -11,7 +11,7 @@ class NotaSuksesPage extends StatelessWidget {
   int hitungManual(List items) {
     int total = 0;
     for (var item in items) {
-      total += (item['harga'] as int);
+      total += (item['harga'] as int? ?? 0);
     }
     return total;
   }
@@ -23,8 +23,12 @@ class NotaSuksesPage extends StatelessWidget {
     // Ambil status dan metode bayar dari data nota (Sinkron dengan Checkout)
     String status = dataNota['status'] ?? 'Diproses';
     Color warnaStatus = dataNota['warnaStatus'] ?? Colors.orange;
-    String metodeBayar = dataNota['metodeBayar'] ?? '-';
+    String metodeBayar =
+        dataNota['metodeBayar'] ?? 'QRIS'; // Default asumsikan sudah bayar QRIS
     String statusLunas = metodeBayar == 'QRIS' ? '(LUNAS)' : '(BAYAR NANTI)';
+
+    // Amankan data list item agar tidak error jika kosong
+    List items = dataNota['items'] as List? ?? [];
 
     return Scaffold(
       backgroundColor: primaryTeal, // Background Teal penuh agar elegan
@@ -109,7 +113,7 @@ class NotaSuksesPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            dataNota['tanggal'] ?? "-",
+                            dataNota['tanggal'] ?? "Baru Saja",
                             style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 11,
@@ -193,56 +197,59 @@ class NotaSuksesPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    ...(dataNota['items'] as List).map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item['nama'],
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                    ...items
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item['nama'] ?? 'Item',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      if (item['spesifikasi'] != null &&
+                                          item['spesifikasi'] != '-')
+                                        Text(
+                                          item['spesifikasi'],
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      if (item['catatan'] != null &&
+                                          item['catatan'] != '-')
+                                        Text(
+                                          "Note: ${item['catatan']}",
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.orange,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                  if (item['spesifikasi'] != null &&
-                                      item['spesifikasi'] != '-')
-                                    Text(
-                                      item['spesifikasi'],
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  if (item['catatan'] != null &&
-                                      item['catatan'] != '-')
-                                    Text(
-                                      "Note: ${item['catatan']}",
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.orange,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                ],
-                              ),
+                                ),
+                                Text(
+                                  formatRupiah(item['harga'] ?? 0),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              formatRupiah(item['harga']),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                          ),
+                        )
+                        .toList(), // Jangan lupa .toList()
 
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
@@ -262,9 +269,7 @@ class NotaSuksesPage extends StatelessWidget {
 
                     _buildSummaryRow(
                       "Subtotal Produk",
-                      formatRupiah(
-                        dataNota['subtotal'] ?? hitungManual(dataNota['items']),
-                      ),
+                      formatRupiah(dataNota['subtotal'] ?? hitungManual(items)),
                     ),
                     _buildSummaryRow(
                       "Ongkos Kirim",
@@ -311,7 +316,7 @@ class NotaSuksesPage extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            formatRupiah(dataNota['total']),
+                            formatRupiah(dataNota['total'] ?? 0),
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -386,7 +391,6 @@ class NotaSuksesPage extends StatelessWidget {
     );
   }
 
-  // Widget khusus untuk rincian biaya (ongkir & diskon)
   Widget _buildSummaryRow(
     String title,
     String value, {

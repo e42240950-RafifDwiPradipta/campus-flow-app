@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../main.dart';
+import '../main.dart'; // Akses formatRupiah
 import 'keranjang_page.dart';
 
 class AtkPage extends StatefulWidget {
@@ -15,10 +15,18 @@ class _AtkPageState extends State<AtkPage> {
   final Color primaryTeal = const Color(0xFF1B4D5C);
   final Map<String, int> _jumlahBeli = {};
 
+  // =========================================================
+  // PERBAIKAN: Variabel penahan Stream agar tidak loading ulang
+  // =========================================================
+  late Stream<QuerySnapshot> _atkStream;
+
   @override
   void initState() {
     super.initState();
     _syncCartFromFirebase(); // Panggil fungsi sinkronisasi saat halaman dibuka
+
+    // PERBAIKAN: Simpan Stream ke memori 1x saja saat halaman dibuka
+    _atkStream = FirebaseFirestore.instance.collection('stok_atk').snapshots();
   }
 
   // =========================================================
@@ -40,7 +48,6 @@ class _AtkPageState extends State<AtkPage> {
         _jumlahBeli.clear();
         for (var doc in snapshot.docs) {
           var data = doc.data();
-          // Simpan jumlah beli ke memori lokal untuk tampilan UI
           _jumlahBeli[data['nama']] = data['jumlah'] ?? 0;
         }
       });
@@ -64,7 +71,7 @@ class _AtkPageState extends State<AtkPage> {
       return;
     }
 
-    // Jadikan nama barang sebagai ID Dokumen (Hapus karakter aneh biar aman)
+    // Jadikan nama barang sebagai ID Dokumen
     String docId = item['nama'].toString().replaceAll(RegExp(r'[/\\?]'), '-');
     var docRef = FirebaseFirestore.instance
         .collection('users')
@@ -74,14 +81,12 @@ class _AtkPageState extends State<AtkPage> {
 
     try {
       if (qty <= 0) {
-        // Kalau 0, hapus dari database
         await docRef.delete();
       } else {
-        // Kalau lebih dari 0, simpan/update ke database
         await docRef.set({
           'jenis': 'ATK',
           'nama': item['nama'],
-          'harga': item['harga'] * qty, // Harga subtotal
+          'harga': (item['harga'] ?? 0) * qty,
           'harga_satuan': item['harga'],
           'detail': 'Produk ATK ($qty pcs)',
           'jumlah': qty,
@@ -117,24 +122,44 @@ class _AtkPageState extends State<AtkPage> {
           // Banner Promo Kecil
           _buildPromoBanner(),
 
+          // =========================================================
+          // FIREBASE: STREAM BUILDER UNTUK DAFTAR PRODUK ATK
+          // =========================================================
           Expanded(
-            child: stokAtkGlobal.isEmpty
-                ? _buildEmptyState()
-                : GridView.builder(
-                    padding: const EdgeInsets.all(15),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 15,
-                          mainAxisSpacing: 15,
-                          childAspectRatio: 0.65,
-                        ),
-                    itemCount: stokAtkGlobal.length,
-                    itemBuilder: (context, index) {
-                      final item = stokAtkGlobal[index];
-                      return _buildProductCard(item);
-                    },
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+                  _atkStream, // PERBAIKAN: Gunakan variabel yang sudah diamankan
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text("Error: ${snapshot.error}"));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                var docs = snapshot.data!.docs;
+
+                return GridView.builder(
+                  padding: const EdgeInsets.all(15),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 15,
+                    mainAxisSpacing: 15,
+                    childAspectRatio: 0.65,
                   ),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final item = docs[index].data() as Map<String, dynamic>;
+                    return _buildProductCard(item);
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -165,8 +190,9 @@ class _AtkPageState extends State<AtkPage> {
   }
 
   Widget _buildProductCard(Map<String, dynamic> item) {
-    final String nama = item['nama'];
+    final String nama = item['nama'] ?? 'Produk';
     final int qty = _jumlahBeli[nama] ?? 0;
+    final int stokTersedia = item['stok'] ?? 0;
     String? urlGambar = item['gambar'];
 
     return Container(
@@ -207,14 +233,14 @@ class _AtkPageState extends State<AtkPage> {
                           height: double.infinity,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => Icon(
-                            item['ikon'] ?? Icons.inventory_2,
+                            Icons.inventory_2, // Fallback aman
                             size: 60,
                             color: primaryTeal,
                           ),
                         ),
                       )
                     : Icon(
-                        item['ikon'] ?? Icons.inventory_2,
+                        Icons.inventory_2, // Fallback aman
                         size: 60,
                         color: primaryTeal,
                       ),
@@ -237,12 +263,12 @@ class _AtkPageState extends State<AtkPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Tersisa: ${item['stok']}",
+                  "Tersisa: $stokTersedia",
                   style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  formatRupiah(item['harga']),
+                  formatRupiah(item['harga'] ?? 0),
                   style: TextStyle(
                     color: primaryTeal,
                     fontWeight: FontWeight.w900,
@@ -251,10 +277,29 @@ class _AtkPageState extends State<AtkPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Cek UI berdasarkan jumlah
-                qty > 0
-                    ? _buildCounter(item, nama, qty)
-                    : _buildBuyButton(item, nama),
+                // Cek UI berdasarkan jumlah (Jika stok 0, tampilkan tombol habis)
+                if (stokTersedia <= 0)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 36,
+                    child: ElevatedButton(
+                      onPressed: null,
+                      style: ElevatedButton.styleFrom(
+                        disabledBackgroundColor: Colors.grey[300],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        "Habis",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  )
+                else if (qty > 0)
+                  _buildCounter(item, nama, qty, stokTersedia)
+                else
+                  _buildBuyButton(item, nama, stokTersedia),
               ],
             ),
           ),
@@ -263,7 +308,12 @@ class _AtkPageState extends State<AtkPage> {
     );
   }
 
-  Widget _buildCounter(Map<String, dynamic> item, String nama, int qty) {
+  Widget _buildCounter(
+    Map<String, dynamic> item,
+    String nama,
+    int qty,
+    int stokTersedia,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -271,7 +321,7 @@ class _AtkPageState extends State<AtkPage> {
           setState(() {
             int newQty = qty - 1;
             _jumlahBeli[nama] = newQty;
-            _updateCartToFirebase(item, newQty); // Tembak ke server
+            _updateCartToFirebase(item, newQty);
           });
         }),
         Text(
@@ -279,12 +329,16 @@ class _AtkPageState extends State<AtkPage> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         _circleBtn(Icons.add, () {
-          if (qty < item['stok']) {
+          if (qty < stokTersedia) {
             setState(() {
               int newQty = qty + 1;
               _jumlahBeli[nama] = newQty;
-              _updateCartToFirebase(item, newQty); // Tembak ke server
+              _updateCartToFirebase(item, newQty);
             });
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Maksimal stok tercapai!")),
+            );
           }
         }),
       ],
@@ -305,16 +359,20 @@ class _AtkPageState extends State<AtkPage> {
     );
   }
 
-  Widget _buildBuyButton(Map<String, dynamic> item, String nama) {
+  Widget _buildBuyButton(
+    Map<String, dynamic> item,
+    String nama,
+    int stokTersedia,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 36,
       child: ElevatedButton(
         onPressed: () {
-          if (item['stok'] > 0) {
+          if (stokTersedia > 0) {
             setState(() {
               _jumlahBeli[nama] = 1;
-              _updateCartToFirebase(item, 1); // Tembak ke server
+              _updateCartToFirebase(item, 1);
             });
           }
         },
@@ -335,7 +393,6 @@ class _AtkPageState extends State<AtkPage> {
   }
 
   Widget? _buildFAB() {
-    // Hitung ada berapa jenis barang yang dibeli
     int cartCount = _jumlahBeli.values.where((qty) => qty > 0).length;
 
     if (cartCount == 0) return null;
@@ -346,7 +403,6 @@ class _AtkPageState extends State<AtkPage> {
             context,
             MaterialPageRoute(builder: (context) => const KeranjangPage()),
           ).then((_) {
-            // Refresh sinkronisasi keranjang ketika kembali dari halaman keranjang
             _syncCartFromFirebase();
           }),
       label: Text("$cartCount Item di Keranjang"),

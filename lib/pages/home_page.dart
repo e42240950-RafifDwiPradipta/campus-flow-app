@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 
@@ -465,7 +467,6 @@ class _HomePageState extends State<HomePage> {
 
   Widget _navItem(IconData icon, String label, int index) {
     bool active = _selectedIndex == index;
-    bool isCart = index == 1 && keranjangGlobal.isNotEmpty; // Deteksi keranjang
 
     return GestureDetector(
       onTap: () {
@@ -509,33 +510,57 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // STACK UNTUK BADGE KERANJANG
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Icon(icon, color: active ? primaryColor : Colors.grey),
-              if (isCart)
-                Positioned(
-                  right: -4,
-                  top: -4,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      "${keranjangGlobal.length}",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
+          // FITUR BARU: REAL-TIME BADGE UNTUK KERANJANG MENGGUNAKAN FIREBASE
+          if (index == 1)
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseAuth.instance.currentUser != null
+                  ? FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                        .collection('cart')
+                        .snapshots()
+                  : const Stream.empty(),
+              builder: (context, snapshot) {
+                int cartCount = 0;
+                if (snapshot.hasData) {
+                  cartCount = snapshot.data!.docs.length;
+                }
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, color: active ? primaryColor : Colors.grey),
+                    if (cartCount > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            "$cartCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+                  ],
+                );
+              },
+            )
+          else
+            // ICON SELAIN KERANJANG (TIDAK ADA BADGE ANGKA)
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(icon, color: active ? primaryColor : Colors.grey),
+              ],
+            ),
           const SizedBox(height: 5),
           Text(
             label,

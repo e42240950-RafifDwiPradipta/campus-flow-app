@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../main.dart'; // Wajib import ini untuk akses daftarAlamatGlobal
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart';
 
 class AlamatPage extends StatefulWidget {
   const AlamatPage({super.key});
@@ -14,7 +16,9 @@ class _AlamatPageState extends State<AlamatPage> {
   final TextEditingController _labelCtrl = TextEditingController();
   final TextEditingController _detailCtrl = TextEditingController();
 
-  // Fungsi Tambah Alamat via Bottom Sheet
+  // =========================================================
+  // FIREBASE: TAMBAH ALAMAT BARU
+  // =========================================================
   void _tampilkanInputAlamat() {
     showModalBottomSheet(
       context: context,
@@ -62,23 +66,51 @@ class _AlamatPageState extends State<AlamatPage> {
             ),
             const SizedBox(height: 25),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (_labelCtrl.text.isNotEmpty && _detailCtrl.text.isNotEmpty) {
-                  setState(() {
-                    // SIMPAN KE GUDANG GLOBAL
-                    daftarAlamatGlobal.add({
-                      "label": _labelCtrl.text,
-                      "detail": _detailCtrl.text,
-                      "isUtama": false,
-                    });
-                  });
-                  _labelCtrl.clear();
-                  _detailCtrl.clear();
-                  Navigator.pop(context);
+                  User? user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    try {
+                      // Tembak data ke Firestore
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .collection('alamat')
+                          .add({
+                            "label": _labelCtrl.text,
+                            "detail": _detailCtrl.text,
+                            "isUtama": false, // Default tidak utama
+                            "timestamp": FieldValue.serverTimestamp(),
+                          });
+
+                      if (mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Alamat berhasil ditambahkan!"),
+                            backgroundColor: Color(0xFF1B4D5C),
+                          ),
+                        );
+                      }
+
+                      _labelCtrl.clear();
+                      _detailCtrl.clear();
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Gagal menambah alamat: $e"),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryTeal,
+                foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 55),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
@@ -86,10 +118,7 @@ class _AlamatPageState extends State<AlamatPage> {
               ),
               child: const Text(
                 "SIMPAN ALAMAT",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 20),
@@ -99,21 +128,73 @@ class _AlamatPageState extends State<AlamatPage> {
     );
   }
 
-  void _hapusAlamat(int index) {
-    setState(() {
-      // HAPUS DARI GUDANG GLOBAL
-      daftarAlamatGlobal.removeAt(index);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Alamat berhasil dihapus"),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  // =========================================================
+  // FIREBASE: HAPUS ALAMAT
+  // =========================================================
+  Future<void> _hapusAlamat(String docId) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('alamat')
+            .doc(docId)
+            .delete();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Alamat berhasil dihapus"),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Gagal menghapus: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // =========================================================
+  // FIREBASE: SET ALAMAT UTAMA
+  // =========================================================
+  Future<void> _setAlamatUtama(String docId) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        // Ambil semua alamat user ini dulu
+        var collectionRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('alamat');
+        var snapshot = await collectionRef.get();
+
+        // Gunakan Batch Update agar pengubahan banyak data dilakukan serentak
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+        for (var doc in snapshot.docs) {
+          // Jika ID cocok, set true. Sisanya set false.
+          batch.update(doc.reference, {'isUtama': doc.id == docId});
+        }
+        await batch.commit();
+      } catch (e) {
+        debugPrint("Gagal update alamat utama: $e");
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    User? user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFB),
       appBar: AppBar(
@@ -127,7 +208,6 @@ class _AlamatPageState extends State<AlamatPage> {
       ),
       body: Column(
         children: [
-          // Header Info
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(25, 10, 25, 30),
@@ -144,21 +224,57 @@ class _AlamatPageState extends State<AlamatPage> {
             ),
           ),
 
+          // =========================================================
+          // FIREBASE: STREAM BUILDER DAFTAR ALAMAT
+          // =========================================================
           Expanded(
-            // BACA DARI GUDANG GLOBAL
-            child: daftarAlamatGlobal.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: daftarAlamatGlobal.length,
-                    itemBuilder: (context, index) {
-                      final item = daftarAlamatGlobal[index];
-                      return _buildAlamatCard(item, index);
+            child: user == null
+                ? const Center(
+                    child: Text("Silakan login untuk melihat alamat."),
+                  )
+                : StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .collection('alamat')
+                        .orderBy('timestamp', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (snapshot.hasError) {
+                        return Center(child: Text("Error: ${snapshot.error}"));
+                      }
+
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return _buildEmptyState();
+                      }
+
+                      var docs = snapshot.data!.docs;
+
+                      // Sinkronisasi data ke variabel global (Opsional, agar fungsi lama yang belum Firebase tidak error)
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        daftarAlamatGlobal = docs
+                            .map((doc) => doc.data() as Map<String, dynamic>)
+                            .toList();
+                      });
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(20),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          final item =
+                              docs[index].data() as Map<String, dynamic>;
+                          final String docId = docs[index].id;
+                          return _buildAlamatCard(item, docId);
+                        },
+                      );
                     },
                   ),
           ),
 
-          // Tombol Tambah di Bawah
           Padding(
             padding: const EdgeInsets.all(20),
             child: ElevatedButton.icon(
@@ -201,7 +317,7 @@ class _AlamatPageState extends State<AlamatPage> {
     );
   }
 
-  Widget _buildAlamatCard(Map<String, dynamic> item, int index) {
+  Widget _buildAlamatCard(Map<String, dynamic> item, String docId) {
     bool isUtama = item['isUtama'] ?? false;
 
     return Container(
@@ -224,14 +340,7 @@ class _AlamatPageState extends State<AlamatPage> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
-          onTap: () {
-            setState(() {
-              for (var alamat in daftarAlamatGlobal) {
-                alamat['isUtama'] = false;
-              }
-              daftarAlamatGlobal[index]['isUtama'] = true;
-            });
-          },
+          onTap: () => _setAlamatUtama(docId), // Panggil Fungsi Firebase
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -253,7 +362,7 @@ class _AlamatPageState extends State<AlamatPage> {
                       Row(
                         children: [
                           Text(
-                            item['label'],
+                            item['label'] ?? 'Alamat',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -283,7 +392,7 @@ class _AlamatPageState extends State<AlamatPage> {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        item['detail'],
+                        item['detail'] ?? '',
                         style: TextStyle(
                           color: Colors.grey[600],
                           fontSize: 13,
@@ -298,7 +407,7 @@ class _AlamatPageState extends State<AlamatPage> {
                     Icons.delete_outline,
                     color: Colors.redAccent,
                   ),
-                  onPressed: () => _showKonfirmasiHapus(index),
+                  onPressed: () => _showKonfirmasiHapus(docId),
                 ),
               ],
             ),
@@ -308,12 +417,15 @@ class _AlamatPageState extends State<AlamatPage> {
     );
   }
 
-  void _showKonfirmasiHapus(int index) {
+  void _showKonfirmasiHapus(String docId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Hapus Alamat?"),
+        title: const Text(
+          "Hapus Alamat?",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text(
           "Apakah kamu yakin ingin menghapus alamat ini dari daftar?",
         ),
@@ -325,9 +437,12 @@ class _AlamatPageState extends State<AlamatPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _hapusAlamat(index);
+              _hapusAlamat(docId); // Hapus lewat Firebase
             },
-            child: const Text("HAPUS", style: TextStyle(color: Colors.red)),
+            child: const Text(
+              "HAPUS",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),

@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart'; // Akses data lokal yang masih tersisa
+import '../main.dart'; // Akses formatRupiah
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -24,6 +24,41 @@ class _AdminPageState extends State<AdminPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+
+    // PANGGIL SI TUKANG SAPU SETIAP KALI ADMIN MEMBUKA HALAMAN INI
+    _bersihkanPesananKadaluarsa();
+  }
+
+  // FUNGSI BARU UNTUK AUTO-CANCEL PESANAN EXPIRED (15 MENIT)
+  Future<void> _bersihkanPesananKadaluarsa() async {
+    try {
+      final waktuBatas = DateTime.now().subtract(const Duration(minutes: 15));
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('status', isEqualTo: 'Menunggu Pembayaran')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+
+        if (data['createdAt'] != null) {
+          DateTime waktuDibuat = (data['createdAt'] as Timestamp).toDate();
+
+          if (waktuDibuat.isBefore(waktuBatas)) {
+            await doc.reference.update({
+              'status': 'Dibatalkan',
+              'keterangan': 'Kadaluarsa otomatis (lebih dari 15 menit)',
+            });
+            debugPrint(
+              "Pesanan ${doc.id} otomatis dibatalkan karena kadaluarsa.",
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error saat membersihkan data kadaluarsa: $e");
+    }
   }
 
   @override
@@ -32,7 +67,6 @@ class _AdminPageState extends State<AdminPage>
     super.dispose();
   }
 
-  // Fungsi pembantu warna status (Biar tidak bergantung pada data statis)
   Color _getColorForStatus(String status) {
     if (status.contains('Selesai')) return Colors.green;
     if (status.contains('Dibatalkan')) return Colors.red;
@@ -81,13 +115,44 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
+  void _simulasiDownload(String namaFile) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(child: Text("Mengunduh $namaFile...")),
+          ],
+        ),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("$namaFile berhasil disimpan di Folder Download!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
-      // =========================================================
-      // FIREBASE: STREAM BUILDER UNTUK SELURUH ADMIN DASHBOARD
-      // =========================================================
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('orders').snapshots(),
         builder: (context, snapshot) {
@@ -99,7 +164,6 @@ class _AdminPageState extends State<AdminPage>
               ? snapshot.data!.docs
               : [];
 
-          // Urutkan pesanan dari yang terbaru
           allOrders.sort((a, b) {
             Timestamp? tA =
                 (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
@@ -109,7 +173,6 @@ class _AdminPageState extends State<AdminPage>
             return tB.compareTo(tA);
           });
 
-          // Kalkulasi Data Live
           int pesananAktif = 0;
           int totalPendapatan = 0;
 
@@ -151,12 +214,10 @@ class _AdminPageState extends State<AdminPage>
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildPesananTab(
-                        allOrders,
-                      ), // Pass data Firebase ke Tab Pesanan
-                      _buildStokTab(), // (Masih lokal)
-                      _buildCustomerTab(), // (Masih lokal)
-                      _buildAcademicTab(), // (Masih lokal)
+                      _buildPesananTab(allOrders),
+                      _buildStokTab(),
+                      _buildCustomerTab(),
+                      _buildAcademicTab(),
                     ],
                   ),
                 ),
@@ -210,16 +271,8 @@ class _AdminPageState extends State<AdminPage>
                   formatRupiah(totalPendapatan),
                   "Pendapatan",
                 ),
-                _buildStatCard(
-                  Icons.people,
-                  "${dataCustomerGlobal.length}",
-                  "Customer",
-                ),
-                _buildStatCard(
-                  Icons.inventory,
-                  "${stokAtkGlobal.length}",
-                  "Produk",
-                ),
+                _buildStatCard(Icons.people, "Live", "Customer"),
+                _buildStatCard(Icons.inventory, "Live", "Produk"),
               ],
             ),
           ),
@@ -261,7 +314,7 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // FIREBASE: TAB PESANAN (MENGGUNAKAN DATA LIVE)
+  // TAB PESANAN (FIREBASE)
   // =========================================================
   Widget _buildPesananTab(List<QueryDocumentSnapshot> allOrders) {
     final List<QueryDocumentSnapshot> filteredOrders = allOrders.where((doc) {
@@ -339,7 +392,7 @@ class _AdminPageState extends State<AdminPage>
                   itemBuilder: (context, index) {
                     final doc = filteredOrders[index];
                     final order = doc.data() as Map<String, dynamic>;
-                    String docId = doc.id; // ID Dokumen Firebase
+                    String docId = doc.id;
 
                     String orderId = (order['id'] ?? "CAMPUS-000").toString();
                     String status = order['status'] ?? "Diproses";
@@ -351,10 +404,7 @@ class _AdminPageState extends State<AdminPage>
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: ListTile(
-                        onTap: () => _showOrderDetail(
-                          order,
-                          docId,
-                        ), // Bawa docId buat update
+                        onTap: () => _showOrderDetail(order, docId),
                         leading: CircleAvatar(
                           backgroundColor: statusColor,
                           child: Icon(
@@ -376,7 +426,6 @@ class _AdminPageState extends State<AdminPage>
                           children: [
                             if (status.contains("Diproses") ||
                                 status == "Menunggu Pembayaran") ...[
-                              // TOMBOL BATAL (ADMIN)
                               IconButton(
                                 icon: const Icon(
                                   Icons.cancel_outlined,
@@ -385,15 +434,12 @@ class _AdminPageState extends State<AdminPage>
                                 onPressed: () => _tampilkanKonfirmasi(
                                   "Batalkan Pesanan?",
                                   "Yakin ingin membatalkan pesanan $orderId?",
-                                  () async {
-                                    await FirebaseFirestore.instance
-                                        .collection('orders')
-                                        .doc(docId)
-                                        .update({'status': 'Dibatalkan'});
-                                  },
+                                  () async => await FirebaseFirestore.instance
+                                      .collection('orders')
+                                      .doc(docId)
+                                      .update({'status': 'Dibatalkan'}),
                                 ),
                               ),
-                              // TOMBOL SELESAI (ADMIN)
                               IconButton(
                                 icon: const Icon(
                                   Icons.check_circle_outline,
@@ -402,12 +448,10 @@ class _AdminPageState extends State<AdminPage>
                                 onPressed: () => _tampilkanKonfirmasi(
                                   "Selesaikan Pesanan?",
                                   "Pastikan barang sudah diterima/dibayar oleh pelanggan.",
-                                  () async {
-                                    await FirebaseFirestore.instance
-                                        .collection('orders')
-                                        .doc(docId)
-                                        .update({'status': 'Selesai'});
-                                  },
+                                  () async => await FirebaseFirestore.instance
+                                      .collection('orders')
+                                      .doc(docId)
+                                      .update({'status': 'Selesai'}),
                                 ),
                               ),
                             ] else
@@ -456,12 +500,10 @@ class _AdminPageState extends State<AdminPage>
                       _tampilkanKonfirmasi(
                         "Batalkan Pesanan?",
                         "Membatalkan pesanan dari dalam menu detail.",
-                        () async {
-                          await FirebaseFirestore.instance
-                              .collection('orders')
-                              .doc(docId)
-                              .update({'status': 'Dibatalkan'});
-                        },
+                        () async => await FirebaseFirestore.instance
+                            .collection('orders')
+                            .doc(docId)
+                            .update({'status': 'Dibatalkan'}),
                       );
                     },
                     icon: const Icon(Icons.cancel, color: Colors.red, size: 16),
@@ -473,8 +515,6 @@ class _AdminPageState extends State<AdminPage>
               ],
             ),
             const Divider(),
-
-            // Info Pemesan
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -514,6 +554,8 @@ class _AdminPageState extends State<AdminPage>
                   namaLowerCase.contains('desain') ||
                   namaLowerCase.contains('design') ||
                   namaLowerCase.contains('foto');
+              String namaFile =
+                  item['file'] ?? item['referensi'] ?? 'dokumen_terlampir.pdf';
 
               return ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -560,13 +602,7 @@ class _AdminPageState extends State<AdminPage>
                           size: 20,
                         ),
                         tooltip: "Unduh File",
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Fitur unduh file menyusul..."),
-                            ),
-                          );
-                        },
+                        onPressed: () => _simulasiDownload(namaFile),
                       ),
                   ],
                 ),
@@ -620,120 +656,9 @@ class _AdminPageState extends State<AdminPage>
   }
 
   // =========================================================
-  // TAB STOK, CUSTOMER, AKADEMIK (TETAP LOKAL SEMENTARA)
+  // TAB CUSTOMER (FIREBASE)
   // =========================================================
-
-  Widget _buildStokTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: ElevatedButton.icon(
-            onPressed: () => _dialogEditStok(-1),
-            icon: const Icon(Icons.add),
-            label: const Text("Tambah Produk"),
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: stokAtkGlobal.length,
-            itemBuilder: (context, index) {
-              final item = stokAtkGlobal[index];
-              int stok = item['stok'] ?? 0;
-              bool stokMenipis = stok < 5;
-              String? urlGambar = item['gambar'];
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  side: BorderSide(
-                    color: stokMenipis
-                        ? Colors.red.shade300
-                        : Colors.transparent,
-                    width: stokMenipis ? 1.5 : 0,
-                  ),
-                ),
-                child: ListTile(
-                  leading: urlGambar != null && urlGambar.isNotEmpty
-                      ? Container(
-                          width: 45,
-                          height: 45,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: primaryColor.withOpacity(0.05),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.network(
-                              urlGambar,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Icon(
-                                Icons.inventory_2,
-                                color: stokMenipis ? Colors.red : primaryColor,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.inventory_2,
-                          color: stokMenipis ? Colors.red : primaryColor,
-                        ),
-                  title: Text(
-                    item['nama'],
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: stokMenipis ? Colors.red : Colors.black87,
-                    ),
-                  ),
-                  subtitle: Text(
-                    "Stok : $stok | ${formatRupiah(item['harga'])}",
-                    style: TextStyle(
-                      color: stokMenipis
-                          ? Colors.red.shade700
-                          : Colors.grey[600],
-                      fontWeight: stokMenipis
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (stokMenipis)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.red,
-                            size: 22,
-                          ),
-                        ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _dialogEditStok(index),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildCustomerTab() {
-    final List filteredCustomers = dataCustomerGlobal.where((customer) {
-      String nama = (customer['nama'] ?? "").toString().toLowerCase();
-      String nim = (customer['nim'] ?? customer['noWa'] ?? "")
-          .toString()
-          .toLowerCase();
-      return nama.contains(_searchCustomer.toLowerCase()) ||
-          nim.contains(_searchCustomer.toLowerCase());
-    }).toList();
-
     return Column(
       children: [
         Padding(
@@ -741,7 +666,7 @@ class _AdminPageState extends State<AdminPage>
           child: TextField(
             onChanged: (v) => setState(() => _searchCustomer = v),
             decoration: InputDecoration(
-              hintText: "Cari nama atau data customer...",
+              hintText: "Cari nama atau email customer...",
               prefixIcon: const Icon(Icons.person_search),
               filled: true,
               fillColor: Colors.white,
@@ -753,57 +678,69 @@ class _AdminPageState extends State<AdminPage>
           ),
         ),
         Expanded(
-          child: filteredCustomers.isEmpty
-              ? const Center(child: Text("Customer tidak ditemukan"))
-              : ListView.builder(
-                  itemCount: filteredCustomers.length,
-                  itemBuilder: (context, index) {
-                    final customer = filteredCustomers[index];
-                    final bool isCurrentUser = customer['nim'] == nimUserGlobal;
-                    final bool hasFoto =
-                        isCurrentUser && fotoUserGlobal != null;
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting)
+                return const Center(child: CircularProgressIndicator());
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+                return const Center(child: Text("Belum ada data customer."));
 
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => _showCustomerDetail(customer),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: primaryColor.withOpacity(0.1),
-                            backgroundImage: hasFoto
-                                ? FileImage(File(fotoUserGlobal!))
-                                      as ImageProvider
-                                : null,
-                            child: hasFoto
-                                ? null
-                                : Icon(Icons.person, color: primaryColor),
+              var docs = snapshot.data!.docs.where((doc) {
+                var data = doc.data() as Map<String, dynamic>;
+                String nama = (data['nama'] ?? data['name'] ?? "")
+                    .toString()
+                    .toLowerCase();
+                String email = (data['email'] ?? "").toString().toLowerCase();
+                String search = _searchCustomer.toLowerCase();
+                return nama.contains(search) || email.contains(search);
+              }).toList();
+
+              if (docs.isEmpty)
+                return const Center(child: Text("Customer tidak ditemukan."));
+
+              return ListView.builder(
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  var customer = docs[index].data() as Map<String, dynamic>;
+                  String docId = docs[index].id;
+                  String nama =
+                      customer['nama'] ?? customer['name'] ?? 'Tanpa Nama';
+                  String email = customer['email'] ?? 'Tidak ada email';
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => _showCustomerDetailFirebase(customer),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: primaryColor.withOpacity(0.1),
+                          child: Icon(Icons.person, color: primaryColor),
+                        ),
+                        title: Text(
+                          nama,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(email),
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.delete_sweep,
+                            color: Colors.red,
                           ),
-                          title: Text(
-                            customer['nama'] ?? 'User',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            customer['nim'] ??
-                                customer['noWa'] ??
-                                'Data tidak lengkap',
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.delete_sweep,
-                              color: Colors.red,
-                            ),
-                            tooltip: "Nonaktifkan/Hapus Akun",
-                            onPressed: () => _tampilkanKonfirmasi(
-                              "Hapus Akun Customer?",
-                              "Apakah kamu yakin ingin menghapus permanen akun ${customer['nama']}?",
-                              () {
-                                setState(
-                                  () => dataCustomerGlobal.remove(customer),
-                                );
+                          tooltip: "Hapus Akun User",
+                          onPressed: () => _tampilkanKonfirmasi(
+                            "Hapus Akun Customer?",
+                            "Apakah kamu yakin ingin menghapus permanen akun $nama dari database?",
+                            () async {
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(docId)
+                                  .delete();
+                              if (mounted)
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
@@ -811,22 +748,27 @@ class _AdminPageState extends State<AdminPage>
                                     ),
                                   ),
                                 );
-                              },
-                            ),
+                            },
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
     );
   }
 
-  void _showCustomerDetail(Map<String, dynamic> customer) {
-    final bool isCurrentUser = customer['nim'] == nimUserGlobal;
-    final bool hasFoto = isCurrentUser && fotoUserGlobal != null;
+  void _showCustomerDetailFirebase(Map<String, dynamic> customer) {
+    String nama = customer['nama'] ?? customer['name'] ?? 'Tanpa Nama';
+    String email = customer['email'] ?? '-';
+    String infoTambahan =
+        customer['nim'] ?? customer['noWa'] ?? customer['phone'] ?? '-';
+    String jurusan = customer['jurusan'] ?? 'Bisnis Digital';
 
     showModalBottomSheet(
       context: context,
@@ -839,35 +781,25 @@ class _AdminPageState extends State<AdminPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(
+              const CircleAvatar(
                 radius: 40,
-                backgroundColor: const Color(0xFF1B4D5C),
-                backgroundImage: hasFoto
-                    ? FileImage(File(fotoUserGlobal!)) as ImageProvider
-                    : null,
-                child: hasFoto
-                    ? null
-                    : const Icon(Icons.person, size: 50, color: Colors.white),
+                backgroundColor: Color(0xFF1B4D5C),
+                child: Icon(Icons.person, size: 50, color: Colors.white),
               ),
               const SizedBox(height: 15),
               Text(
-                customer['nama'] ?? 'Tanpa Nama',
+                nama,
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 20),
-              _buildDetailRow("NIM", customer['nim'] ?? '-'),
+              _buildDetailRow("Email", email),
               const Divider(),
-              _buildDetailRow("Email", customer['email'] ?? '-'),
+              _buildDetailRow("NIM / Info", infoTambahan),
               const Divider(),
-              _buildDetailRow("No. WhatsApp", customer['noWa'] ?? '-'),
-              const Divider(),
-              _buildDetailRow(
-                "Jurusan/Prodi",
-                customer['jurusan'] ?? 'Bisnis Digital',
-              ),
+              _buildDetailRow("Jurusan/Prodi", jurusan),
               const SizedBox(height: 20),
             ],
           ),
@@ -876,34 +808,124 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  Widget _buildAcademicTab() {
+  // =========================================================
+  // TAB STOK ATK (FIREBASE: koleksi 'stok_atk')
+  // =========================================================
+  Widget _buildStokTab() {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(12),
           child: ElevatedButton.icon(
-            onPressed: () => _dialogEditAkademik(-1),
-            icon: const Icon(Icons.calendar_month),
-            label: const Text("Tambah Jadwal"),
+            onPressed: () => _dialogEditStok(null, null),
+            icon: const Icon(Icons.add),
+            label: const Text("Tambah Produk"),
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: dataKalenderGlobal.length,
-            itemBuilder: (context, index) {
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: ListTile(
-                  title: Text(
-                    dataKalenderGlobal[index]['title'],
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(dataKalenderGlobal[index]['date']),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () => _dialogEditAkademik(index),
-                  ),
-                ),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('stok_atk')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting)
+                return const Center(child: CircularProgressIndicator());
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+                return const Center(child: Text("Belum ada data stok."));
+
+              var docs = snapshot.data!.docs;
+
+              return ListView.builder(
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  var item = docs[index].data() as Map<String, dynamic>;
+                  String docId = docs[index].id;
+
+                  int stok = item['stok'] ?? 0;
+                  bool stokMenipis = stok < 5;
+                  String? urlGambar = item['gambar'];
+                  String namaBarang = item['nama'] ?? 'Item';
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      side: BorderSide(
+                        color: stokMenipis
+                            ? Colors.red.shade300
+                            : Colors.transparent,
+                        width: stokMenipis ? 1.5 : 0,
+                      ),
+                    ),
+                    child: ListTile(
+                      leading: urlGambar != null && urlGambar.isNotEmpty
+                          ? Container(
+                              width: 45,
+                              height: 45,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                color: primaryColor.withOpacity(0.05),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(
+                                  urlGambar,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Icon(
+                                    Icons.inventory_2,
+                                    color: stokMenipis
+                                        ? Colors.red
+                                        : primaryColor,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              Icons.inventory_2,
+                              color: stokMenipis ? Colors.red : primaryColor,
+                            ),
+                      title: Text(
+                        namaBarang,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: stokMenipis ? Colors.red : Colors.black87,
+                        ),
+                      ),
+                      subtitle: Text(
+                        "Stok : $stok | ${formatRupiah(item['harga'] ?? 0)}",
+                        style: TextStyle(
+                          color: stokMenipis
+                              ? Colors.red.shade700
+                              : Colors.grey[600],
+                          fontWeight: stokMenipis
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (stokMenipis)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Icon(
+                                Icons.warning_amber_rounded,
+                                color: Colors.red,
+                                size: 22,
+                              ),
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _dialogEditStok(docId, item),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -912,137 +934,16 @@ class _AdminPageState extends State<AdminPage>
     );
   }
 
-  void _dialogEditAkademik(int index) {
-    final isEdit = index != -1;
-    final tCtrl = TextEditingController(
-      text: isEdit ? dataKalenderGlobal[index]['title'] : "",
-    );
-    Color selectedColor = isEdit
-        ? dataKalenderGlobal[index]['color']
-        : Colors.orange;
-    DateTimeRange? range;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialog) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(isEdit ? "Edit Jadwal" : "Tambah Jadwal"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: tCtrl,
-                decoration: const InputDecoration(labelText: "Nama Kegiatan"),
-              ),
-              const SizedBox(height: 15),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2035),
-                  );
-                  if (picked != null) setDialog(() => range = picked);
-                },
-                icon: const Icon(Icons.date_range),
-                label: Text(
-                  range != null
-                      ? "${DateFormat('dd MMM').format(range!.start)} - ${DateFormat('dd MMM').format(range!.end)}"
-                      : (isEdit
-                            ? dataKalenderGlobal[index]['date']
-                            : "Pilih Rentang"),
-                ),
-              ),
-              const SizedBox(height: 15),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [Colors.orange, Colors.blue, Colors.red, Colors.green]
-                    .map((color) {
-                      return GestureDetector(
-                        onTap: () => setDialog(() => selectedColor = color),
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 5),
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selectedColor == color
-                                  ? Colors.black87
-                                  : Colors.transparent,
-                              width: 3,
-                            ),
-                          ),
-                        ),
-                      );
-                    })
-                    .toList(),
-              ),
-            ],
-          ),
-          actions: [
-            if (isEdit)
-              TextButton(
-                onPressed: () {
-                  setState(() => dataKalenderGlobal.removeAt(index));
-                  Navigator.pop(context);
-                },
-                child: const Text("Hapus", style: TextStyle(color: Colors.red)),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Batal"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (tCtrl.text.isNotEmpty && (range != null || isEdit)) {
-                  setState(() {
-                    final newData = {
-                      "title": tCtrl.text,
-                      "date": range != null
-                          ? "${DateFormat('dd MMM').format(range!.start)} - ${DateFormat('dd MMM yyyy').format(range!.end)}"
-                          : dataKalenderGlobal[index]['date'],
-                      "color": selectedColor,
-                      "markerStart":
-                          range?.start ??
-                          dataKalenderGlobal[index]['markerStart'],
-                      "markerEnd":
-                          range?.end ?? dataKalenderGlobal[index]['markerEnd'],
-                    };
-                    if (isEdit)
-                      dataKalenderGlobal[index] = newData;
-                    else
-                      dataKalenderGlobal.add(newData);
-                  });
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text("Simpan"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _dialogEditStok(int index) {
-    final isEdit = index != -1;
-    final nCtrl = TextEditingController(
-      text: isEdit ? stokAtkGlobal[index]['nama'] : "",
-    );
+  void _dialogEditStok(String? docId, Map<String, dynamic>? currentData) {
+    final isEdit = docId != null;
+    final nCtrl = TextEditingController(text: currentData?['nama'] ?? "");
     final sCtrl = TextEditingController(
-      text: isEdit ? stokAtkGlobal[index]['stok'].toString() : "",
+      text: currentData?['stok']?.toString() ?? "",
     );
     final hCtrl = TextEditingController(
-      text: isEdit ? stokAtkGlobal[index]['harga'].toString() : "",
+      text: currentData?['harga']?.toString() ?? "",
     );
-    final gCtrl = TextEditingController(
-      text: isEdit ? (stokAtkGlobal[index]['gambar'] ?? "") : "",
-    );
+    final gCtrl = TextEditingController(text: currentData?['gambar'] ?? "");
 
     showDialog(
       context: context,
@@ -1078,9 +979,12 @@ class _AdminPageState extends State<AdminPage>
         actions: [
           if (isEdit)
             TextButton(
-              onPressed: () {
-                setState(() => stokAtkGlobal.removeAt(index));
-                Navigator.pop(context);
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('stok_atk')
+                    .doc(docId)
+                    .delete();
+                if (mounted) Navigator.pop(context);
               },
               child: const Text("Hapus", style: TextStyle(color: Colors.red)),
             ),
@@ -1089,31 +993,220 @@ class _AdminPageState extends State<AdminPage>
             child: const Text("Batal"),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nCtrl.text.isNotEmpty &&
                   sCtrl.text.isNotEmpty &&
                   hCtrl.text.isNotEmpty) {
-                setState(() {
-                  final newData = {
-                    "nama": nCtrl.text,
-                    "stok": int.tryParse(sCtrl.text) ?? 0,
-                    "harga": int.tryParse(hCtrl.text) ?? 0,
-                    "gambar": gCtrl.text,
-                    "ikon": isEdit
-                        ? stokAtkGlobal[index]['ikon']
-                        : Icons.inventory_2,
-                  };
-                  if (isEdit)
-                    stokAtkGlobal[index] = newData;
-                  else
-                    stokAtkGlobal.add(newData);
-                });
-                Navigator.pop(context);
+                final newData = {
+                  "nama": nCtrl.text,
+                  "stok": int.tryParse(sCtrl.text) ?? 0,
+                  "harga": int.tryParse(hCtrl.text) ?? 0,
+                  "gambar": gCtrl.text,
+                };
+
+                if (isEdit) {
+                  await FirebaseFirestore.instance
+                      .collection('stok_atk')
+                      .doc(docId)
+                      .update(newData);
+                } else {
+                  await FirebaseFirestore.instance
+                      .collection('stok_atk')
+                      .add(newData);
+                }
+
+                if (mounted) Navigator.pop(context);
               }
             },
             child: const Text("Simpan"),
           ),
         ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // TAB AKADEMIK (FIREBASE: koleksi 'kalender_akademik')
+  // =========================================================
+  Widget _buildAcademicTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: ElevatedButton.icon(
+            onPressed: () => _dialogEditAkademik(null, null),
+            icon: const Icon(Icons.calendar_month),
+            label: const Text("Tambah Jadwal"),
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('kalender_akademik')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting)
+                return const Center(child: CircularProgressIndicator());
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+                return const Center(child: Text("Belum ada data jadwal."));
+
+              var docs = snapshot.data!.docs;
+
+              return ListView.builder(
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  var item = docs[index].data() as Map<String, dynamic>;
+                  String docId = docs[index].id;
+
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    child: ListTile(
+                      title: Text(
+                        item['title'] ?? 'Kegiatan',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(item['date'] ?? '-'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _dialogEditAkademik(docId, item),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _dialogEditAkademik(String? docId, Map<String, dynamic>? currentData) {
+    final isEdit = docId != null;
+    final tCtrl = TextEditingController(text: currentData?['title'] ?? "");
+
+    // Ambil warna dari integer yang disimpan, atau default orange
+    Color selectedColor = currentData != null && currentData['color'] != null
+        ? Color(currentData['color'])
+        : Colors.orange;
+
+    DateTimeRange? range;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(isEdit ? "Edit Jadwal" : "Tambah Jadwal"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: tCtrl,
+                decoration: const InputDecoration(labelText: "Nama Kegiatan"),
+              ),
+              const SizedBox(height: 15),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2035),
+                  );
+                  if (picked != null) setDialog(() => range = picked);
+                },
+                icon: const Icon(Icons.date_range),
+                // PERBAIKAN STRUKTUR IF-ELSE (TERNARY)
+                label: Text(
+                  range != null
+                      ? "${DateFormat('dd MMM').format(range!.start)} - ${DateFormat('dd MMM').format(range!.end)}"
+                      : (isEdit
+                            ? (currentData?['date']?.toString() ??
+                                  "Pilih Rentang")
+                            : "Pilih Rentang"),
+                ),
+              ),
+              const SizedBox(height: 15),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [Colors.orange, Colors.blue, Colors.red, Colors.green]
+                    .map((color) {
+                      return GestureDetector(
+                        onTap: () => setDialog(() => selectedColor = color),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 5),
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selectedColor == color
+                                  ? Colors.black87
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
+                          ),
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
+            ],
+          ),
+          actions: [
+            if (isEdit)
+              TextButton(
+                onPressed: () async {
+                  await FirebaseFirestore.instance
+                      .collection('kalender_akademik')
+                      .doc(docId)
+                      .delete();
+                  if (mounted) Navigator.pop(context);
+                },
+                child: const Text("Hapus", style: TextStyle(color: Colors.red)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Batal"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (tCtrl.text.isNotEmpty && (range != null || isEdit)) {
+                  final newData = {
+                    "title": tCtrl.text,
+                    "date": range != null
+                        ? "${DateFormat('dd MMM').format(range!.start)} - ${DateFormat('dd MMM yyyy').format(range!.end)}"
+                        : currentData?['date'],
+                    "color":
+                        selectedColor.value, // Simpan warna sebagai Integer
+                    "markerStart": range?.start ?? currentData?['markerStart'],
+                    "markerEnd": range?.end ?? currentData?['markerEnd'],
+                  };
+
+                  if (isEdit) {
+                    await FirebaseFirestore.instance
+                        .collection('kalender_akademik')
+                        .doc(docId)
+                        .update(newData);
+                  } else {
+                    await FirebaseFirestore.instance
+                        .collection('kalender_akademik')
+                        .add(newData);
+                  }
+
+                  if (mounted) Navigator.pop(context);
+                }
+              },
+              child: const Text("Simpan"),
+            ),
+          ],
+        ),
       ),
     );
   }

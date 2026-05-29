@@ -71,31 +71,6 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       try {
-        // =========================
-        // 1. LOGIN ADMIN (Jalur Cepat)
-        // =========================
-        if (_emailCtrl.text == "admin@satset.com" &&
-            _passCtrl.text == "admin123") {
-          isAdminGlobal = true;
-          namaUserGlobal = "Admin Campus";
-          nimUserGlobal = "ADMIN001";
-          emailUserGlobal = "admin@satset.com";
-
-          if (mounted) Navigator.pop(context); // Tutup Loading
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
-            );
-          }
-          return; // Hentikan fungsi di sini khusus Admin
-        }
-
-        // =========================
-        // 2. LOGIN USER (Lewat Firebase)
-        // =========================
-        isAdminGlobal = false;
-
         // Cek ke server Firebase
         UserCredential userCredential = await FirebaseAuth.instance
             .signInWithEmailAndPassword(
@@ -112,11 +87,15 @@ class _LoginPageState extends State<LoginPage> {
         if (userDoc.exists) {
           Map<String, dynamic> userData =
               userDoc.data() as Map<String, dynamic>;
+
           setState(() {
             namaUserGlobal = userData['nama'] ?? "";
             nimUserGlobal = userData['nim'] ?? "";
             emailUserGlobal = userData['email'] ?? _emailCtrl.text;
             noWaUserGlobal = userData['noWa'] ?? "";
+
+            // Cek role admin dari Firestore
+            isAdminGlobal = (userData['role'] == 'admin');
           });
         } else {
           // Jika data di Firestore tidak ditemukan
@@ -124,12 +103,16 @@ class _LoginPageState extends State<LoginPage> {
             namaUserGlobal = _emailCtrl.text.split('@')[0];
             nimUserGlobal = "Belum terdaftar";
             emailUserGlobal = _emailCtrl.text;
+            isAdminGlobal = false;
           });
         }
 
         if (mounted) Navigator.pop(context); // Tutup Loading
 
-        // Berhasil, pindah ke Home
+        // =========================
+        // REDIRECT SEMUA KE HOME PAGE
+        // (Admin bisa buka dashboard dari Drawer di Home Page)
+        // =========================
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -139,7 +122,10 @@ class _LoginPageState extends State<LoginPage> {
       } on FirebaseAuthException catch (e) {
         if (mounted) Navigator.pop(context); // Tutup Loading
 
-        String errorMsg = "Terjadi kesalahan saat login.";
+        // KITA MUNCULKAN ERROR ASLINYA DARI FIREBASE
+        String errorMsg = "Error Firebase: ${e.code}";
+        debugPrint("Detail Error Auth: ${e.message}");
+
         if (e.code == 'user-not-found' ||
             e.code == 'invalid-credential' ||
             e.code == 'wrong-password') {
@@ -148,6 +134,11 @@ class _LoginPageState extends State<LoginPage> {
           errorMsg = "Format email tidak valid.";
         } else if (e.code == 'too-many-requests') {
           errorMsg = "Terlalu banyak percobaan. Coba lagi nanti.";
+        } else if (e.code == 'network-request-failed') {
+          errorMsg = "Tidak ada koneksi internet di Emulator/HP!";
+        } else {
+          // Menangkap error lain (Misal: Auth belum diaktifkan di Firebase Console)
+          errorMsg = e.message ?? "Terjadi kesalahan saat login.";
         }
 
         if (mounted) {
@@ -161,10 +152,12 @@ class _LoginPageState extends State<LoginPage> {
         }
       } catch (e) {
         if (mounted) Navigator.pop(context); // Tutup Loading
+
+        debugPrint("Error Sistem: $e");
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Gagal mengambil data dari server."),
+              content: Text("Gagal: $e"),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
             ),
@@ -311,26 +304,29 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const SizedBox(height: 20),
 
-                  // LOGO
+                  // =========================
+                  // LOGO YANG BARU
+                  // =========================
                   Container(
-                    padding: const EdgeInsets.all(25),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF114B5F), Color(0xFF1A759F)],
-                      ),
-                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withOpacity(0.08),
                           blurRadius: 20,
                           offset: const Offset(0, 6),
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.auto_awesome_motion,
-                      size: 65,
-                      color: Colors.white,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(25),
+                      child: Image.asset(
+                        'assets/logo_campus_flow.png',
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 25),

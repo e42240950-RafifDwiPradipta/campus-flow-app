@@ -15,6 +15,7 @@ class JasaDesignPage extends StatefulWidget {
 class _JasaDesignPageState extends State<JasaDesignPage> {
   final Color primaryTeal = const Color(0xFF1B4D5C);
 
+  // 1. DATA REMOVE BG SUDAH DIHAPUS
   final List<Map<String, dynamic>> paketDesign = [
     {
       "nama": "Desain Poster / Flyer",
@@ -37,13 +38,6 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
       "ikon": Icons.category_outlined,
       "warna": const Color(0xFFF3E5F5),
     },
-    {
-      "nama": "Edit Foto / Remove BG",
-      "harga": 10000,
-      "deskripsi": "Retouching, ganti background",
-      "ikon": Icons.auto_fix_high,
-      "warna": const Color(0xFFE8F5E9),
-    },
   ];
 
   // =========================================================
@@ -54,6 +48,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
     String brief,
     String wa,
     String? namaFile,
+    int jumlahPesanan, // <--- TAMBAHAN PARAMETER JUMLAH
   ) async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -76,6 +71,9 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
     );
 
     try {
+      int totalHargaAkhir =
+          paket['harga'] * jumlahPesanan; // Hitung total harga
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -83,10 +81,10 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
           .add({
             'jenis': 'Design',
             'nama': paket['nama'],
-            'harga': paket['harga'],
+            'harga': totalHargaAkhir, // Masukkan harga hasil perkalian
             'detail': "File: ${namaFile ?? 'Tidak ada'}",
             'catatan': "WA: $wa | Detail: $brief",
-            'jumlah': 1, // Fix 1 karena jasa design dihitung per paket layanan
+            'jumlah': jumlahPesanan, // Simpan jumlah ke database
             'timestamp': FieldValue.serverTimestamp(),
           });
 
@@ -120,6 +118,10 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
     final TextEditingController waCtrl = TextEditingController();
     String? namaFileLampiran;
 
+    // 2. VARIABEL PENYIMPAN JUMLAH (Khusus PPT)
+    int jumlahItem = 1;
+    bool isPPT = paket['nama'].toString().contains('PPT');
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -127,6 +129,9 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            // Hitung harga total secara real-time di UI
+            int totalHargaTampil = paket['harga'] * jumlahItem;
+
             return Container(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -168,8 +173,9 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                                 fontSize: 16,
                               ),
                             ),
+                            // TAMPILKAN HARGA TOTAL DINAMIS
                             Text(
-                              formatRupiah(paket['harga']),
+                              formatRupiah(totalHargaTampil),
                               style: TextStyle(
                                 color: primaryTeal,
                                 fontWeight: FontWeight.bold,
@@ -181,6 +187,64 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                     ],
                   ),
                   const Divider(height: 30),
+
+                  // ==========================================
+                  // 3. FITUR KUSTOMISASI JUMLAH SLIDE PPT
+                  // ==========================================
+                  if (isPPT) ...[
+                    const Text(
+                      "Jumlah Slide Dibutuhkan",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            color: jumlahItem > 1 ? primaryTeal : Colors.grey,
+                            onPressed: () {
+                              if (jumlahItem > 1) {
+                                setModalState(() => jumlahItem--);
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 15),
+                          Text(
+                            "$jumlahItem",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            color: primaryTeal,
+                            onPressed: () {
+                              setModalState(() => jumlahItem++);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                  ],
+
+                  // ==========================================
                   const Text(
                     "Deskripsi Kebutuhan",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -191,7 +255,7 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                     maxLines: 3,
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: "Contoh: Tolong hapus background foto ini...",
+                      hintText: "Contoh: Tolong buatkan desain minimalis...",
                       filled: true,
                       fillColor: Colors.grey[50],
                       border: OutlineInputBorder(
@@ -283,12 +347,13 @@ class _JasaDesignPageState extends State<JasaDesignPage> {
                         return;
                       }
 
-                      // Panggil fungsi Firebase
+                      // Panggil fungsi Firebase & KASIH DATA JUMLAH
                       _submitOrderToFirebase(
                         paket,
                         briefCtrl.text,
                         waCtrl.text,
                         namaFileLampiran,
+                        jumlahItem, // <--- Lempar angka jumlahnya kesini
                       );
                     },
                     style: ElevatedButton.styleFrom(

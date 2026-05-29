@@ -1,4 +1,4 @@
-name: print_it_bondowoso
+name: Campus_Flow
 description: "A new Flutter project."
 publish_to: "none"
 
@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # PENTING: intl dan lainnya harus sejajar di bawah flutter:
   intl: ^0.19.0
   table_calendar: ^3.1.2
   cupertino_icons: ^1.0.8
@@ -24,15 +23,32 @@ dependencies:
   firebase_core: ^4.9.0
   firebase_auth: ^6.5.1
   cloud_firestore: ^6.4.1
+  url_launcher: ^6.3.2
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  # PENTING: Tambahkan ini agar bisa mengganti ikon
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
 
-  # Aktifkan jika nanti sudah ada folder assets/images
-  # assets:
-  #   - assets/images/
+  assets:
+    - .env
+    - assets/logo_campus_flow.png
+    - assets/logo_splash.png
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo_campus_flow.png"
+
+flutter_native_splash:
+  color: "#1B4D5C"
+  image: assets/logo_splash.png
+  android_gravity: center
+  fullscreen: true

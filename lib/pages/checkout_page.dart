@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../main.dart'; // Akses formatRupiah, daftarAlamatGlobal, dll
+import '../main.dart';
 import 'package:intl/intl.dart';
 import 'nota_sukses_page.dart';
+import 'qris_asli_page.dart';
+// --- TAMBAHAN IMPORT DOTENV ---
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key});
@@ -21,7 +24,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   double _estimasiJarak = 0.0;
   int _biayaOngkir = 0;
 
-  // Variabel untuk menampung data keranjang dari Firebase
   List<QueryDocumentSnapshot> _cartItems = [];
   bool _isLoading = true;
 
@@ -29,12 +31,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
   void initState() {
     super.initState();
     _alamatCtrl.addListener(_hitungOngkir);
-    _loadCartData(); // Ambil data dari Firebase saat halaman dibuka
+    _loadCartData();
   }
 
-  // =========================================================
-  // FIREBASE: AMBIL DATA KERANJANG
-  // =========================================================
   Future<void> _loadCartData() async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -73,20 +72,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
 
     String alamat = _alamatCtrl.text.toLowerCase();
-    if (alamat.contains("kampus") || alamat.contains("polije")) {
-      _estimasiJarak = 2.5;
-    } else if (alamat.contains("mastrip")) {
+    if (alamat.contains("kampus") ||
+        alamat.contains("polije") ||
+        alamat.contains("pancoran") ||
+        alamat.contains("blindungan") ||
+        alamat.contains("situbondo")) {
+      _estimasiJarak = 1.5;
+    } else if (alamat.contains("alun") || alamat.contains("kota")) {
+      _estimasiJarak = 4.0;
+    } else if (alamat.contains("tenggarang") || alamat.contains("nangkaan")) {
       _estimasiJarak = 6.0;
     } else {
-      _estimasiJarak = 4.0 + (alamat.length % 5);
+      _estimasiJarak = 3.0 + (alamat.length % 4);
     }
 
     int baseOngkir = 3000;
-    if (_estimasiJarak <= 5.0) {
+    if (_estimasiJarak <= 3.0) {
       _biayaOngkir = baseOngkir;
     } else {
-      int extraKm = (_estimasiJarak - 5.0).ceil();
-      _biayaOngkir = baseOngkir + (extraKm * 1000);
+      int extraKm = (_estimasiJarak - 3.0).ceil();
+      _biayaOngkir = baseOngkir + (extraKm * 1500);
     }
     setState(() {});
   }
@@ -264,12 +269,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildRincianPesanan() {
-    if (_cartItems.isEmpty)
+    if (_cartItems.isEmpty) {
       return const Text(
         "Keranjang Kosong",
         style: TextStyle(color: Colors.grey),
       );
-
+    }
     return Column(
       children: _cartItems.map((doc) {
         var item = doc.data() as Map<String, dynamic>;
@@ -363,7 +368,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             controller: _alamatCtrl,
             style: const TextStyle(fontSize: 13),
             decoration: InputDecoration(
-              hintText: "Contoh: Gedung B, Lantai 2...",
+              hintText: "Contoh: Kost Jl. Raya Situbondo, Blindungan...",
               prefixIcon: const Icon(Icons.map, size: 20),
               filled: true,
               fillColor: Colors.grey[50],
@@ -413,7 +418,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       decoration: InputDecoration(
         contentPadding: const EdgeInsets.symmetric(horizontal: 15),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        prefixIcon: Icon(Icons.qr_code_scanner, color: primaryTeal),
+        prefixIcon: Icon(Icons.payment, color: primaryTeal),
       ),
       items: ["QRIS", "Tunai"]
           .map(
@@ -541,8 +546,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                if (_cartItems.isEmpty) return; // Cegah checkout kosong
-
+                if (_cartItems.isEmpty) return;
                 if (_metodeAmbil == "Diantar (COD)" &&
                     _alamatCtrl.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -552,11 +556,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   );
                   return;
                 }
-                if (_metodeBayar == "QRIS") {
-                  _tampilkanDialogQRIS();
-                } else {
-                  _jalankanLoadingDanSimpan();
-                }
+                _jalankanLoadingDanSimpan();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryTeal,
@@ -580,91 +580,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  void _tampilkanDialogQRIS() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-        contentPadding: const EdgeInsets.all(25),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "Scan QRIS",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              "Campus Flow / PT Mahasiswa Maju",
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.grey[300]!, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Icon(Icons.qr_code_2, size: 200, color: primaryTeal),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              "Total Tagihan",
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-            Text(
-              formatRupiah(hitungTotal()),
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.orange[800],
-              ),
-            ),
-            const SizedBox(height: 25),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _jalankanLoadingDanSimpan();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryTeal,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-              ),
-              child: const Text(
-                "SAYA SUDAH BAYAR",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                "Batalkan",
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
-  // FIREBASE: PROSES SIMPAN ORDER & HAPUS CART
-  // =========================================================
   void _jalankanLoadingDanSimpan() {
     showDialog(
       context: context,
@@ -702,10 +617,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   Future<void> _prosesSimpanDataFirebase() async {
     User? user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) Navigator.pop(context); // Tutup loading
-      return;
-    }
+    if (user == null) return;
 
     try {
       String generatedId =
@@ -714,7 +626,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'dd MMM yyyy, HH:mm',
       ).format(DateTime.now());
 
-      // 1. Ekstrak data dari _cartItems (Snapshot Firebase)
       List<Map<String, dynamic>> itemsFinal = _cartItems.map((doc) {
         var item = doc.data() as Map<String, dynamic>;
         return {
@@ -728,7 +639,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
         };
       }).toList();
 
-      // Struktur Data Order untuk disimpan ke Firebase
+      String statusAwal = _metodeBayar == "QRIS"
+          ? "Menunggu Pembayaran"
+          : "Diproses";
+
       Map<String, dynamic> orderData = {
         'id': generatedId,
         'uid': user.uid,
@@ -745,42 +659,72 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ? _alamatCtrl.text
             : "Ambil di Tempat",
         'tanggal': orderDate,
-        'status': 'Diproses', // Default Status untuk admin
+        'status': statusAwal,
         'timestamp': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
       };
 
-      // 2. Simpan ke koleksi 'orders' (Utama)
       await FirebaseFirestore.instance
           .collection('orders')
           .doc(generatedId)
           .set(orderData);
 
-      // 3. Hapus semua data di sub-koleksi 'cart' user ini (Batch Delete)
+      for (var doc in _cartItems) {
+        var item = doc.data() as Map<String, dynamic>;
+        String namaProduk = item['nama'] ?? '';
+        int jumlahDibeli = item['jumlah'] ?? 1;
+
+        var cekStok = await FirebaseFirestore.instance
+            .collection('stok_atk')
+            .where('nama', isEqualTo: namaProduk)
+            .limit(1)
+            .get();
+
+        if (cekStok.docs.isNotEmpty) {
+          String docIdStok = cekStok.docs.first.id;
+          await FirebaseFirestore.instance
+              .collection('stok_atk')
+              .doc(docIdStok)
+              .update({'stok': FieldValue.increment(-jumlahDibeli)});
+        }
+      }
+
       WriteBatch batch = FirebaseFirestore.instance.batch();
       for (var doc in _cartItems) {
         batch.delete(doc.reference);
       }
       await batch.commit();
 
-      if (mounted) Navigator.pop(context); // Tutup Loading
+      if (mounted) Navigator.pop(context);
 
-      // 4. Navigasi ke Halaman Sukses
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => NotaSuksesPage(dataNota: orderData),
-          ),
-        );
+        if (_metodeBayar == "QRIS") {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => QrisAsliPage(
+                orderId: generatedId,
+                totalTagihan: hitungTotal(),
+                dataPesananLengkap: orderData,
+                // --- SEKARANG MENGAMBIL DARI DOTENV ---
+                serverKey: dotenv.env['MIDTRANS_SERVER_KEY'] ?? "",
+              ),
+            ),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NotaSuksesPage(dataNota: orderData),
+            ),
+          );
+        }
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context); // Tutup Loading
+      if (mounted) Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Gagal memproses pesanan: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Gagal: $e"), backgroundColor: Colors.red),
         );
       }
     }

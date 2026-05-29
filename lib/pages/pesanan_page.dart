@@ -21,6 +21,52 @@ class _PesananPageState extends State<PesananPage> {
     return primaryTeal; // Default untuk "Diproses"
   }
 
+  // =========================================================
+  // TAMBAHAN: Panggil pembersih otomatis saat halaman dibuka
+  // =========================================================
+  @override
+  void initState() {
+    super.initState();
+    _bersihkanPesananKadaluarsa();
+  }
+
+  // Fungsi untuk mengecek dan membatalkan pesanan milik user ini yang expired
+  Future<void> _bersihkanPesananKadaluarsa() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return; // Jika belum login, abaikan
+
+    try {
+      final waktuBatas = DateTime.now().subtract(const Duration(minutes: 15));
+
+      // Tarik HANYA pesanan milik user ini yang statusnya "Menunggu Pembayaran"
+      final snapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('uid', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'Menunggu Pembayaran')
+          .get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+
+        if (data['createdAt'] != null) {
+          DateTime waktuDibuat = (data['createdAt'] as Timestamp).toDate();
+
+          if (waktuDibuat.isBefore(waktuBatas)) {
+            await doc.reference.update({
+              'status': 'Dibatalkan',
+              'keterangan': 'Kadaluarsa otomatis (lebih dari 15 menit)',
+            });
+            debugPrint(
+              "Pesanan ${doc.id} milik user otomatis dibatalkan karena kadaluarsa.",
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error saat membersihkan data kadaluarsa user: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     User? user = FirebaseAuth.instance.currentUser;
@@ -344,7 +390,6 @@ class _PesananPageState extends State<PesananPage> {
                 Text(
                   formatRupiah(order['total'] ?? 0),
                   style: TextStyle(
-                    // <--- Hapus kata 'const' di sini
                     color: primaryTeal,
                     fontWeight: FontWeight.bold,
                     fontSize: 20,

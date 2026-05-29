@@ -5,13 +5,70 @@ import '../main.dart'; // Akses isAdminGlobal, stokAtkGlobal
 import 'pesanan_page.dart';
 import 'admin_page.dart';
 
-class NotifikasiPage extends StatelessWidget {
+class NotifikasiPage extends StatefulWidget {
   const NotifikasiPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final Color primaryTeal = const Color(0xFF1B4D5C);
+  State<NotifikasiPage> createState() => _NotifikasiPageState();
+}
 
+class _NotifikasiPageState extends State<NotifikasiPage> {
+  final Color primaryTeal = const Color(0xFF1B4D5C);
+
+  // =========================================================
+  // TAMBAHAN: Panggil pembersih otomatis saat halaman dibuka
+  // =========================================================
+  @override
+  void initState() {
+    super.initState();
+    _bersihkanPesananKadaluarsa();
+  }
+
+  // Fungsi pembersih cerdas: menyesuaikan dengan role (Admin / User)
+  Future<void> _bersihkanPesananKadaluarsa() async {
+    try {
+      final waktuBatas = DateTime.now().subtract(const Duration(minutes: 15));
+
+      Query query = FirebaseFirestore.instance
+          .collection('orders')
+          .where('status', isEqualTo: 'Menunggu Pembayaran');
+
+      // Jika bukan admin, pastikan HANYA membersihkan pesanan milik user ini sendiri
+      if (!isAdminGlobal) {
+        User? user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          query = query.where('uid', isEqualTo: user.uid);
+        } else {
+          return; // Jika belum login, batalkan proses
+        }
+      }
+
+      final snapshot = await query.get();
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+
+        if (data['createdAt'] != null) {
+          DateTime waktuDibuat = (data['createdAt'] as Timestamp).toDate();
+
+          if (waktuDibuat.isBefore(waktuBatas)) {
+            await doc.reference.update({
+              'status': 'Dibatalkan',
+              'keterangan': 'Kadaluarsa otomatis (lebih dari 15 menit)',
+            });
+            debugPrint(
+              "Pesanan ${doc.id} otomatis dibatalkan via NotifikasiPage.",
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error saat membersihkan data kadaluarsa di notifikasi: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFB),
       appBar: AppBar(
@@ -136,18 +193,24 @@ class NotifikasiPage extends StatelessWidget {
           }
         }
 
-        // 2. Kumpulkan Notifikasi Pesanan Baru dari Firebase (Hanya yang status Diproses)
+        // 2. Kumpulkan Notifikasi Pesanan Baru & Batal dari Firebase
         List<Map<String, dynamic>> pesananBaru = [];
         if (snapshot.hasData) {
           for (var doc in snapshot.data!.docs) {
             var pesanan = doc.data() as Map<String, dynamic>;
             String status = pesanan['status'] ?? '';
 
-            // Cek apakah status mengandung kata 'Diproses'
             if (status.contains('Diproses')) {
               pesananBaru.add({
                 'type': 'pesanan_baru',
                 'title': "Pesanan Baru Masuk: ${pesanan['id']}",
+                'time': pesanan['tanggal'] ?? '-',
+                'timestamp_val': pesanan['timestamp'] ?? Timestamp.now(),
+              });
+            } else if (status == 'Dibatalkan') {
+              pesananBaru.add({
+                'type': 'pesanan_batal',
+                'title': "Pesanan Dibatalkan/Expired: ${pesanan['id']}",
                 'time': pesanan['tanggal'] ?? '-',
                 'timestamp_val': pesanan['timestamp'] ?? Timestamp.now(),
               });
@@ -181,6 +244,15 @@ class NotifikasiPage extends StatelessWidget {
               return _buildNotificationCard(
                 context: context,
                 icon: Icons.warning_amber_rounded,
+                color: Colors.red,
+                title: notif['title'],
+                time: notif['time'],
+                destination: const AdminPage(),
+              );
+            } else if (notif['type'] == 'pesanan_batal') {
+              return _buildNotificationCard(
+                context: context,
+                icon: Icons.cancel_outlined,
                 color: Colors.red,
                 title: notif['title'],
                 time: notif['time'],

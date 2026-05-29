@@ -7,21 +7,23 @@ import 'pages/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
+// --- TAMBAHAN DOTENV ---
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 // --- GUDANG DATA GLOBAL CAMPUS FLOW ---
 
 // 1. Identitas User
 String namaUserGlobal = "";
 String nimUserGlobal = "";
 String emailUserGlobal = "";
-String noWaUserGlobal = ""; // Sudah diletakkan di posisi yang benar
+String noWaUserGlobal = "";
 String? fotoUserGlobal;
 bool isAdminGlobal = false;
 
 // 2. Data Transaksi, Keranjang & Notifikasi
 List<Map<String, dynamic>> daftarPesananGlobal = [];
 List<Map<String, dynamic>> keranjangGlobal = [];
-List<Map<String, dynamic>> notifikasiGlobal =
-    []; // Sudah dideklarasikan di sini
+List<Map<String, dynamic>> notifikasiGlobal = [];
 
 // 3. Data Stok ATK
 List<Map<String, dynamic>> stokAtkGlobal = [
@@ -84,6 +86,9 @@ String formatRupiah(num angka) {
 void main() async {
   // Wajib ditambahkan sebelum inisialisasi Firebase
   WidgetsFlutterBinding.ensureInitialized();
+
+  // --- MEMUAT FILE .ENV ---
+  await dotenv.load(fileName: ".env");
 
   // Menyalakan mesin Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

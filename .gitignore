@@ -46,3 +46,6 @@ app.*.map.json
 
 # Firebase config (JANGAN DI-UPLOAD)
 android/app/google-services.json
+
+# Secrets
+.env
