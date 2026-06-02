@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert'; // TAMBAHAN: Untuk baca JSON
+import 'package:flutter/services.dart'; // TAMBAHAN: Untuk load file dari assets
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -58,6 +60,68 @@ class _AdminPageState extends State<AdminPage>
       }
     } catch (e) {
       debugPrint("Error saat membersihkan data kadaluarsa: $e");
+    }
+  }
+
+  // =========================================================
+  // TOMBOL RAHASIA: UPLOAD JSON KE FIREBASE (BISA DIHAPUS NANTI)
+  // =========================================================
+  Future<void> _uploadJsonKeFirebase() async {
+    try {
+      final String response = await rootBundle.loadString(
+        'assets/jadwal_genap.json',
+      );
+      final List<dynamic> dataJadwal = json.decode(response);
+
+      for (var jadwal in dataJadwal) {
+        // Parsing tanggal dari JSON agar formatnya sesuai dengan sistem kamu
+        DateTime start = DateTime.parse(jadwal["tanggal_mulai"]);
+        DateTime end = DateTime.parse(jadwal["tanggal_selesai"]);
+        String dateStr =
+            "${DateFormat('dd MMM').format(start)} - ${DateFormat('dd MMM yyyy').format(end)}";
+
+        // Konversi warna string ke Integer Color (sesuai sistem kamu)
+        Color colorVal = Colors.orange; // Default
+        if (jadwal["warna"] == "biru")
+          colorVal = Colors.blue;
+        else if (jadwal["warna"] == "merah")
+          colorVal = Colors.red;
+        else if (jadwal["warna"] == "hijau")
+          colorVal = Colors.green;
+        else if (jadwal["warna"] == "oranye")
+          colorVal = Colors.orange;
+
+        // Push ke Firestore sesuai schema '_dialogEditAkademik'
+        await FirebaseFirestore.instance.collection('kalender_akademik').add({
+          "title": jadwal["nama_kegiatan"],
+          "date": dateStr,
+          "color": colorVal.value,
+          "markerStart": Timestamp.fromDate(start),
+          "markerEnd": Timestamp.fromDate(end),
+          "timestamp": FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Mantap! Jadwal dari JSON berhasil masuk Firebase 🚀",
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Yah, gagal upload: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Gagal upload: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -1033,10 +1097,23 @@ class _AdminPageState extends State<AdminPage>
       children: [
         Padding(
           padding: const EdgeInsets.all(20),
-          child: ElevatedButton.icon(
-            onPressed: () => _dialogEditAkademik(null, null),
-            icon: const Icon(Icons.calendar_month),
-            label: const Text("Tambah Jadwal"),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _dialogEditAkademik(null, null),
+                icon: const Icon(Icons.calendar_month),
+                label: const Text("Tambah Jadwal"),
+              ),
+              const SizedBox(width: 10),
+              // TOMBOL SEMENTARA (Nanti tinggal dihapus kalau sudah sukses)
+              ElevatedButton.icon(
+                onPressed: _uploadJsonKeFirebase,
+                icon: const Icon(Icons.upload_file),
+                label: const Text("Upload JSON"),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              ),
+            ],
           ),
         ),
         Expanded(

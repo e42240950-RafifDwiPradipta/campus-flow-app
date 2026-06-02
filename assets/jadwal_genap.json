@@ -1,0 +1,74 @@
+[
+  {
+    "nama_kegiatan": "Pembayaran UKT dan Her Registrasi",
+    "tanggal_mulai": "2026-01-01",
+    "tanggal_selesai": "2026-01-23",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pengajuan Penyesuaian UKT",
+    "tanggal_mulai": "2026-01-01",
+    "tanggal_selesai": "2026-01-07",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pengajuan Cuti Akademik",
+    "tanggal_mulai": "2026-01-26",
+    "tanggal_selesai": "2026-02-13",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik (Minggu 1-6)",
+    "tanggal_mulai": "2026-02-02",
+    "tanggal_selesai": "2026-03-13",
+    "warna": "hijau"
+  },
+  {
+    "nama_kegiatan": "Libur Akademik (Hari Raya Idul Fitri)",
+    "tanggal_mulai": "2026-03-16",
+    "tanggal_selesai": "2026-03-27",
+    "warna": "merah"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik (Minggu 7)",
+    "tanggal_mulai": "2026-03-30",
+    "tanggal_selesai": "2026-04-03",
+    "warna": "hijau"
+  },
+  {
+    "nama_kegiatan": "Ujian Tengah Semester / UTS (Minggu 8)",
+    "tanggal_mulai": "2026-04-06",
+    "tanggal_selesai": "2026-04-10",
+    "warna": "oranye"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik (Minggu 9-15)",
+    "tanggal_mulai": "2026-04-13",
+    "tanggal_selesai": "2026-05-29",
+    "warna": "hijau"
+  },
+  {
+    "nama_kegiatan": "Minggu Tenang",
+    "tanggal_mulai": "2026-06-01",
+    "tanggal_selesai": "2026-06-05",
+    "warna": "merah"
+  },
+  {
+    "nama_kegiatan": "Ujian Akhir Semester / UAS (Minggu 16)",
+    "tanggal_mulai": "2026-06-08",
+    "tanggal_selesai": "2026-06-12",
+    "warna": "oranye"
+  },
+  {
+    "nama_kegiatan": "Entri Nilai oleh Dosen",
+    "tanggal_mulai": "2026-06-13",
+    "tanggal_selesai": "2026-06-26",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Cetak Kartu Hasil Studi (KHS) dan Perwalian",
+    "tanggal_mulai": "2026-07-20",
+    "tanggal_selesai": "2026-07-24",
+    "warna": "biru"
+  }
+]

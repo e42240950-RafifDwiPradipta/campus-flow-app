@@ -15,7 +15,6 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
-  // Modifikasi fungsi agar menerima data dari Firebase
   List<Map<String, dynamic>> _getEventsForDay(
     DateTime day,
     List<Map<String, dynamic>> dataKalender,
@@ -50,9 +49,6 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      // =========================================================
-      // FIREBASE: STREAM BUILDER UNTUK MENGAMBIL JADWAL
-      // =========================================================
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('kalender_akademik')
@@ -70,7 +66,6 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
             );
           }
 
-          // Format data Firebase (Timestamp -> DateTime & Int -> Color)
           List<Map<String, dynamic>> kalenderData = [];
           if (snapshot.hasData) {
             kalenderData = snapshot.data!.docs.map((doc) {
@@ -85,7 +80,6 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
             }).toList();
           }
 
-          // Logika Filter Event Rentang Panjang & Pendek untuk Bulan Fokus
           final eventsThisMonth = kalenderData.where((event) {
             if (event['markerStart'] == null || event['markerEnd'] == null) {
               return false;
@@ -128,8 +122,41 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
                   calendarBuilders: CalendarBuilders(
                     defaultBuilder: (context, day, focusedDay) {
                       final events = _getEventsForDay(day, kalenderData);
+
                       if (events.isNotEmpty) {
-                        Color eventColor = events[0]['color'] ?? Colors.orange;
+                        // =========================================================
+                        // LOGIKA PRIORITAS WARNA (Sesuai Permintaan)
+                        // =========================================================
+                        bool adaMerah = false;
+                        bool adaOranye = false;
+                        bool adaBiru = false;
+                        bool adaHijau = false;
+
+                        for (var e in events) {
+                          Color c = e['color'] ?? Colors.orange;
+                          if (c.value == Colors.red.value)
+                            adaMerah = true;
+                          else if (c.value == Colors.orange.value)
+                            adaOranye = true;
+                          else if (c.value == Colors.blue.value)
+                            adaBiru = true;
+                          else if (c.value == Colors.green.value)
+                            adaHijau = true;
+                        }
+
+                        Color eventColor;
+                        if (adaMerah)
+                          eventColor = Colors.red;
+                        else if (adaOranye)
+                          eventColor = Colors.orange;
+                        else if (adaBiru)
+                          eventColor = Colors.blue;
+                        else if (adaHijau)
+                          eventColor = Colors.green;
+                        else
+                          eventColor = events[0]['color'] ?? Colors.orange;
+                        // =========================================================
+
                         return Container(
                           margin: const EdgeInsets.all(6.0),
                           decoration: BoxDecoration(
@@ -152,10 +179,6 @@ class _KalenderAkademikPageState extends State<KalenderAkademikPage> {
                 ),
               ),
               const Divider(height: 1),
-
-              // =========================================================
-              // LIST EVENT YANG SUDAH DI-FILTER
-              // =========================================================
               Expanded(
                 child: eventsThisMonth.isEmpty
                     ? const Center(

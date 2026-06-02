@@ -38,6 +38,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/jadwal_genap.json
     - .env
     - assets/logo_campus_flow.png
     - assets/logo_splash.png
