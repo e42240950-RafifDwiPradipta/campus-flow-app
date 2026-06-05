@@ -1,74 +1,218 @@
 [
   {
-    "nama_kegiatan": "Pembayaran UKT dan Her Registrasi",
-    "tanggal_mulai": "2026-01-01",
-    "tanggal_selesai": "2026-01-23",
+    "nama_kegiatan": "Pengajuan Penyesuaian UKT oleh mahasiswa",
+    "tanggal_mulai": "2026-06-29",
+    "tanggal_selesai": "2026-07-03",
     "warna": "biru"
   },
   {
-    "nama_kegiatan": "Pengajuan Penyesuaian UKT",
-    "tanggal_mulai": "2026-01-01",
-    "tanggal_selesai": "2026-01-07",
+    "nama_kegiatan": "Persetujuan Penyesuaian UKT oleh WD",
+    "tanggal_mulai": "2026-07-06",
+    "tanggal_selesai": "2026-07-10",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pembayaran UKT dan Her Registrasi Semester Ganjil",
+    "tanggal_mulai": "2026-07-20",
+    "tanggal_selesai": "2026-08-14",
     "warna": "biru"
   },
   {
     "nama_kegiatan": "Pengajuan Cuti Akademik",
-    "tanggal_mulai": "2026-01-26",
-    "tanggal_selesai": "2026-02-13",
+    "tanggal_mulai": "2026-07-27",
+    "tanggal_selesai": "2026-08-14",
     "warna": "biru"
   },
   {
-    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik (Minggu 1-6)",
-    "tanggal_mulai": "2026-02-02",
-    "tanggal_selesai": "2026-03-13",
+    "nama_kegiatan": "PKKMB",
+    "tanggal_mulai": "2026-08-10",
+    "tanggal_selesai": "2026-08-15",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik Ganjil (Minggu 1-7)",
+    "tanggal_mulai": "2026-08-24",
+    "tanggal_selesai": "2026-10-09",
     "warna": "hijau"
   },
   {
-    "nama_kegiatan": "Libur Akademik (Hari Raya Idul Fitri)",
-    "tanggal_mulai": "2026-03-16",
-    "tanggal_selesai": "2026-03-27",
-    "warna": "merah"
+    "nama_kegiatan": "Pelaporan PDDikti Semester Ganjil Checkpoint I",
+    "tanggal_mulai": "2026-08-24",
+    "tanggal_selesai": "2026-09-30",
+    "warna": "biru"
   },
   {
-    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik (Minggu 7)",
-    "tanggal_mulai": "2026-03-30",
-    "tanggal_selesai": "2026-04-03",
-    "warna": "hijau"
-  },
-  {
-    "nama_kegiatan": "Ujian Tengah Semester / UTS (Minggu 8)",
-    "tanggal_mulai": "2026-04-06",
-    "tanggal_selesai": "2026-04-10",
+    "nama_kegiatan": "UTS Ganjil (Minggu 8)",
+    "tanggal_mulai": "2026-10-12",
+    "tanggal_selesai": "2026-10-16",
     "warna": "oranye"
   },
   {
-    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik (Minggu 9-15)",
-    "tanggal_mulai": "2026-04-13",
-    "tanggal_selesai": "2026-05-29",
+    "nama_kegiatan": "Wisuda ke-50",
+    "tanggal_mulai": "2026-10-03",
+    "tanggal_selesai": "2026-10-04",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik Ganjil (Minggu 9-15)",
+    "tanggal_mulai": "2026-10-19",
+    "tanggal_selesai": "2026-12-04",
     "warna": "hijau"
   },
   {
     "nama_kegiatan": "Minggu Tenang",
-    "tanggal_mulai": "2026-06-01",
-    "tanggal_selesai": "2026-06-05",
+    "tanggal_mulai": "2026-12-07",
+    "tanggal_selesai": "2026-12-11",
     "warna": "merah"
   },
   {
-    "nama_kegiatan": "Ujian Akhir Semester / UAS (Minggu 16)",
-    "tanggal_mulai": "2026-06-08",
-    "tanggal_selesai": "2026-06-12",
+    "nama_kegiatan": "UAS Ganjil (Minggu 16)",
+    "tanggal_mulai": "2026-12-14",
+    "tanggal_selesai": "2026-12-18",
     "warna": "oranye"
   },
   {
     "nama_kegiatan": "Entri Nilai oleh Dosen",
-    "tanggal_mulai": "2026-06-13",
-    "tanggal_selesai": "2026-06-26",
+    "tanggal_mulai": "2026-10-19",
+    "tanggal_selesai": "2027-01-02",
     "warna": "biru"
   },
   {
-    "nama_kegiatan": "Cetak Kartu Hasil Studi (KHS) dan Perwalian",
-    "tanggal_mulai": "2026-07-20",
-    "tanggal_selesai": "2026-07-24",
+    "nama_kegiatan": "Perbaikan Nilai",
+    "tanggal_mulai": "2027-01-04",
+    "tanggal_selesai": "2027-01-15",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Rapat Evaluasi Semester Ganjil",
+    "tanggal_mulai": "2027-02-19",
+    "tanggal_selesai": "2027-02-19",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Cetak KHS dan Perwalian",
+    "tanggal_mulai": "2027-02-19",
+    "tanggal_selesai": "2027-02-22",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pelaporan PDDikti Semester Ganjil Checkpoint II",
+    "tanggal_mulai": "2027-02-19",
+    "tanggal_selesai": "2027-03-31",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pengajuan Penyesuaian UKT (Genap)",
+    "tanggal_mulai": "2026-12-07",
+    "tanggal_selesai": "2026-12-11",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Persetujuan Penyesuaian UKT (Genap)",
+    "tanggal_mulai": "2026-12-14",
+    "tanggal_selesai": "2026-12-18",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pembayaran UKT dan Her Registrasi Semester Genap",
+    "tanggal_mulai": "2027-01-04",
+    "tanggal_selesai": "2027-01-22",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pengajuan Cuti Akademik (Genap)",
+    "tanggal_mulai": "2027-01-04",
+    "tanggal_selesai": "2027-01-22",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pelaporan PDDikti Semester Genap Checkpoint I",
+    "tanggal_mulai": "2027-02-01",
+    "tanggal_selesai": "2027-03-31",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik Genap (Minggu 1-4)",
+    "tanggal_mulai": "2027-02-01",
+    "tanggal_selesai": "2027-02-26",
+    "warna": "hijau"
+  },
+  {
+    "nama_kegiatan": "Libur Akademik (Hari Raya Idul Fitri)",
+    "tanggal_mulai": "2027-03-01",
+    "tanggal_selesai": "2027-03-12",
+    "warna": "merah"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik Genap (Minggu 5-7)",
+    "tanggal_mulai": "2027-03-15",
+    "tanggal_selesai": "2027-04-02",
+    "warna": "hijau"
+  },
+  {
+    "nama_kegiatan": "UTS Genap (Minggu 8)",
+    "tanggal_mulai": "2027-04-05",
+    "tanggal_selesai": "2027-04-09",
+    "warna": "oranye"
+  },
+  {
+    "nama_kegiatan": "Kegiatan Perkuliahan / Praktik Genap (Minggu 9-15)",
+    "tanggal_mulai": "2027-04-12",
+    "tanggal_selesai": "2027-05-28",
+    "warna": "hijau"
+  },
+  {
+    "nama_kegiatan": "Minggu Tenang (Genap)",
+    "tanggal_mulai": "2027-05-31",
+    "tanggal_selesai": "2027-06-04",
+    "warna": "merah"
+  },
+  {
+    "nama_kegiatan": "UAS Genap (Minggu 16)",
+    "tanggal_mulai": "2027-06-07",
+    "tanggal_selesai": "2027-06-11",
+    "warna": "oranye"
+  },
+  {
+    "nama_kegiatan": "Entri Nilai oleh Dosen (Genap)",
+    "tanggal_mulai": "2027-04-12",
+    "tanggal_selesai": "2027-06-25",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Perbaikan Nilai (Genap)",
+    "tanggal_mulai": "2027-06-28",
+    "tanggal_selesai": "2027-07-09",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Wisuda ke-51",
+    "tanggal_mulai": "2027-07-10",
+    "tanggal_selesai": "2027-07-10",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Rapat Kenaikan Tingkat Jurusan",
+    "tanggal_mulai": "2027-07-13",
+    "tanggal_selesai": "2027-07-13",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Rapat Kenaikan Tingkat Politeknik",
+    "tanggal_mulai": "2027-07-15",
+    "tanggal_selesai": "2027-07-15",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Cetak KHS dan Perwalian (Genap)",
+    "tanggal_mulai": "2027-07-15",
+    "tanggal_selesai": "2027-07-23",
+    "warna": "biru"
+  },
+  {
+    "nama_kegiatan": "Pelaporan PDDikti Semester Genap Checkpoint II",
+    "tanggal_mulai": "2027-07-16",
+    "tanggal_selesai": "2027-08-31",
     "warna": "biru"
   }
 ]

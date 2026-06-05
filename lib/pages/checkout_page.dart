@@ -123,7 +123,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return hitungSubtotal() + _biayaOngkir - hitungDiskon();
   }
 
+  // =========================================================
+  // FUNGSI DIUBAH: MENAMPILKAN ALAMAT ASLI DARI FIREBASE
+  // =========================================================
   void _pilihAlamatTersimpan() {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -141,32 +147,70 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               const SizedBox(height: 15),
-              ...daftarAlamatGlobal.map(
-                (alamatMap) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: primaryTeal.withOpacity(0.1),
-                    child: Icon(
-                      Icons.location_on,
-                      color: primaryTeal,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    alamatMap['label'],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    alamatMap['detail'],
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  onTap: () {
-                    _alamatCtrl.text = alamatMap['detail'];
-                    _hitungOngkir();
-                    Navigator.pop(context);
+
+              // MENGGUNAKAN FUTURE BUILDER UNTUK AMBIL DATA FIREBASE
+              Expanded(
+                child: FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .collection('alamat')
+                      .get(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError ||
+                        !snapshot.hasData ||
+                        snapshot.data!.docs.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          "Belum ada alamat tersimpan.",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      );
+                    }
+
+                    return ListView(
+                      shrinkWrap: true,
+                      children: snapshot.data!.docs.map((doc) {
+                        var alamatData = doc.data() as Map<String, dynamic>;
+                        String label = alamatData['label'] ?? 'Alamat';
+                        String detail = alamatData['detail'] ?? '-';
+
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: primaryTeal.withOpacity(0.1),
+                            child: Icon(
+                              Icons.location_on,
+                              color: primaryTeal,
+                              size: 20,
+                            ),
+                          ),
+                          title: Text(
+                            label,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Text(
+                            detail,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          onTap: () {
+                            _alamatCtrl.text = detail;
+                            _hitungOngkir();
+                            Navigator.pop(context);
+                          },
+                        );
+                      }).toList(),
+                    );
                   },
                 ),
               ),
@@ -190,6 +234,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       },
     );
   }
+  // =========================================================
 
   @override
   Widget build(BuildContext context) {
